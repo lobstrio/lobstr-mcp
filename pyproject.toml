@@ -13,7 +13,7 @@ dependencies = [
     "httpx>=0.27",
     # The MCP client is a thin adapter over the official SDK. 0.4.0 adds the
     # max_pages cap + user_agent/transport hooks + raw payloads it relies on.
-    "lobstrio-sdk>=0.4.0",
+    "lobstrio-sdk>=0.7.0",
     "redis>=8.1.0",
     "sentry-sdk>=2.0",
 ]

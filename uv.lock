@@ -628,7 +628,7 @@ requires-dist = [
     { name = "fakeredis", marker = "extra == 'dev'", specifier = ">=2.37.1" },
     { name = "fastmcp", specifier = ">=3.4,<4" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "lobstrio-sdk", specifier = ">=0.4.0" },
+    { name = "lobstrio-sdk", specifier = ">=0.7.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
     { name = "redis", specifier = ">=8.1.0" },
     { name = "sentry-sdk", specifier = ">=2.0" },
@@ -637,14 +637,14 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "lobstrio-sdk"
-version = "0.6.0"
+version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b5/8d/c85fee1ea0b42777afec9fdea05a5ef52807f444119282b721c90e89556f/lobstrio_sdk-0.6.0.tar.gz", hash = "sha256:e459b9c1fb322a9ee0082ad548b85b728efc83f75c0deb97833b64f794d2f39f", size = 40766, upload-time = "2026-09-10T16:14:07.034Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/11/54/f8102c92dfebcbfa191e771bcc05b934389d81cf9d80630e5c2efece4aa0/lobstrio_sdk-0.7.0.tar.gz", hash = "sha256:832f769453b3ca6f8724e282899a14a86c7121067dae3286df72d4fd37b06529", size = 46110, upload-time = "2026-09-15T10:56:57.393Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/58/30/7bdd6748e35ca8f52f529d0e679d61f59d70786943e6a3fd4adfb9a0bbae/lobstrio_sdk-0.6.0-py3-none-any.whl", hash = "sha256:c5dda909768a1a5ffe91d84fa14cd4827f1d31834d243b235388f6e0deda2d1f", size = 31301, upload-time = "2026-09-10T16:14:06.018Z" },
+    { url = "https://files.pythonhosted.org/packages/90/55/ae2188146cbe945471aad34817873a9929851f40a57422519fc05b9d83a5/lobstrio_sdk-0.7.0-py3-none-any.whl", hash = "sha256:9c2ce9487802c4c362577cd4b47544d7a3ed2f2c3714614fb802e65bca5dc9c5", size = 34555, upload-time = "2026-09-15T10:56:56.265Z" },
 ]
 
 [[package]]
@@ -1195,8 +1195,8 @@ name = "secretstorage"
 version = "3.5.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "cryptography", marker = "sys_platform != 'win32'" },
-    { name = "jeepney", marker = "sys_platform != 'win32'" },
+    { name = "cryptography" },
+    { name = "jeepney" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1c/03/e834bcd866f2f8a49a85eaff47340affa3bfa391ee9912a952a1faa68c7b/secretstorage-3.5.0.tar.gz", hash = "sha256:f04b8e4689cbce351744d5537bf6b1329c6fc68f91fa666f60a380edddcd11be", size = 19884, upload-time = "2025-11-23T19:02:53.191Z" }
 wheels = [
