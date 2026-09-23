@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest a tool, capability, or client this server should support
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do
+      description: The task or workflow this would help with.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: A new tool, a change to an existing one, or something else.
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any existing tool or workaround you tried, and why it fell short.
+    validations:
+      required: false

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Account, billing or general support
+    url: https://lobstr.io/contact
+    about: Questions about your Lobstr account, credits, or scrapers themselves belong here, not in this repo's issues.
+  - name: Security vulnerability
+    url: https://github.com/lobstrio/lobstr-mcp/security/advisories/new
+    about: Please report vulnerabilities privately rather than as a public issue.
