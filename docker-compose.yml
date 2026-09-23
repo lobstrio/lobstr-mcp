@@ -1,0 +1,35 @@
+# Single-instance deployment (test server and mcp.lobstr.io alike).
+# Set LOBSTR_MCP_REDIS_URL + LOBSTR_MCP_TOKEN_KEY in .env and the token,
+# DCR-client and idempotency stores move to Redis; leave them unset and the
+# state is in-process and dies with the container.
+services:
+  lobstr-mcp:
+    build: .
+    image: lobstr-mcp:latest
+    env_file: .env
+    # `up -d --build` recreates the container (new container ID) and removes
+    # the old one, taking its default json-file log with it — that's how the
+    # 2026-09-08/09 incident timeline had to be rebuilt from git reflog and
+    # nginx access logs instead of uvicorn's own output. journald lives on the
+    # host, outside the container's lifecycle, so a rebuild does not lose it;
+    # `docker logs` still works against a journald-backed container (it does
+    # not against syslog/fluentd). The fixed `tag` is what makes retrieval
+    # stable across rebuilds — CONTAINER_ID changes every rebuild, the tag
+    # does not. See "Reading the logs after a redeploy" in DEPLOY.md.
+    logging:
+      driver: journald
+      options:
+        tag: lobstr-mcp
+    # Host networking: the container talks to host-loopback services —
+    # Redis (LOBSTR_MCP_REDIS_URL on 127.0.0.1:6379) and, where configured that
+    # way, the Django API — so it must share the host's network namespace.
+    # Port 8000 is bound directly (no ports: mapping).
+    network_mode: host
+    restart: unless-stopped
+    # Full OAuth server (the deployed shape). Bound to loopback: with
+    # network_mode: host, 0.0.0.0 would publish the plaintext app straight to
+    # the internet alongside the TLS vhost. nginx (mcp.lobstr.io) proxies to
+    # 127.0.0.1:8000 and terminates TLS. For the dev no-auth app instead,
+    # set LOBSTR_DEV_TOKEN and override:
+    #   command: ["uvicorn","lobstr_mcp.server:app","--host","127.0.0.1","--port","8000"]
+    command: ["uvicorn","lobstr_mcp.server:create_app","--factory","--host","127.0.0.1","--port","8000","--proxy-headers","--forwarded-allow-ips","127.0.0.1"]

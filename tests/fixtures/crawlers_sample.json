@@ -1,0 +1,332 @@
+[
+  {
+    "id": "6f99262f742b533d96936bf4088fba3e",
+    "name": "Reddit Scraper",
+    "slug": "reddit-scraper",
+    "description": "Scrape Reddit posts and content",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "b3362ab52c6fab3d8897af79cbba380e",
+    "name": "Trustpilot Reviews Scraper",
+    "slug": "trustpilot-reviews-scraper",
+    "description": "Extract reviews, ratings, author information, and verification status from any Trustpilot company profile",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "4734d096159ef05210e0e1677e8be823",
+    "name": "Google Maps Leads Scraper",
+    "slug": "google-maps-leads-scraper",
+    "description": "Give us your properly built Google Maps Search URL(s). Grab all results available. Phone, rating, website included!",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "e625ce52e98a6d4d1b53ef36dff7dacb",
+    "name": "Google Maps Reviews Scraper",
+    "slug": "google-maps-reviews-scraper",
+    "description": "Give us your cool Google Maps Establishment URLs. Grab all available previews!",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 0.2
+    },
+    "is_available": true
+  },
+  {
+    "id": "f588385d11c48f8af51560e561077238",
+    "name": "Google Search Scraper",
+    "slug": "google-search-scraper",
+    "description": "Give us your Google Search URL(s). Grab all results available. Organic results, ads, and questions/answers included!",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "06faf01896336c01ffb5e96d13dd406c",
+    "name": "Google News Search Export",
+    "slug": "google-news-search-export",
+    "description": "Extract Google News results based on a keyword or topic.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "3cf27be3402dbc529ed0db7d18135e8c",
+    "name": "Facebook Comments Scraper",
+    "slug": "facebook-comments-scraper",
+    "description": "Give us a Facebook post, photo, video or reel URL and we will export every public comment with author details, reactions, attachments and reply threads.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "438eabd1f513b6773600c166ad3ddbb4",
+    "name": "Instagram Post Comments Scraper",
+    "slug": "instagram-post-comments-scraper",
+    "description": "Collect comments from any Instagram post or reel",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "0424cc372bc39cd81341b4a800203525",
+    "name": "LinkedIn Search Scraper",
+    "slug": "linkedin-search-scraper",
+    "description": "Paste a LinkedIn search URL (people, companies or posts) and export every result LinkedIn shows you: profiles with name, headline, location, photo and connection degree; company pages with industry, location, logo and follower counts; posts with their full text, author, permalink and publication date. You connect your own LinkedIn account and the scraper browses with it, exactly like you would in your browser. LinkedIn caps every search at about 1,000 results (use filters or several searches to slice a bigger query). Optional add-ons open each profile, each company page or each post once to add the full details.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "08ac061ab290b5ae0f831e086c98d4b5",
+    "name": "LinkedIn Company Employees Scraper",
+    "slug": "linkedin-company-employees-scraper",
+    "description": "Scrape employees of any LinkedIn company from its company URL: full name, headline, profile URL, location, photo, connection degree and the company they were matched on. You connect your own LinkedIn account and the scraper browses with it, exactly like you would in your browser. LinkedIn caps this search at 1,000 employees per company (use the keyword filter to slice bigger companies), and profiles that are too distant from your network come back as 'LinkedIn Member' with no name or profile URL - measured at around 10% of rows on a well-connected account, more on a fresh or weakly-connected one.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "b5a5fc71ba325dc507bc302e02327d9b",
+    "name": "LinkedIn Jobs Scraper",
+    "slug": "linkedin-jobs-scraper",
+    "description": "Give us a LinkedIn jobs search URL and we will export every job posting with full description, structured salary, recruiter and company details. A link to a single job posting works too. Reads LinkedIn's public job pages — no LinkedIn account required, zero risk.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "4bc153aae1e138d894b630bf165825ee",
+    "name": "Glassdoor Jobs Scraper",
+    "slug": "glassdoor-jobs-scraper",
+    "description": "Give us a Glassdoor job search URL — or just a keyword and a location — and we will export every job posting with the full description, salary estimate, apply link and the complete company profile with all of its Glassdoor ratings. Reads Glassdoor's public job search, no account required, zero risk.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "f8209af58c212db5d8468d068e09ce02",
+    "name": "Crunchbase Companies Scraper",
+    "slug": "crunchbase-companies-scraper",
+    "description": "Give us a Crunchbase company URL or a Crunchbase company search, and we export the company profile: description, website, industries, headquarters, employee range, contacts, founders, investors, funding rounds, acquisitions, products, growth and heat scores, and the technology and intent data Crunchbase publishes. No Crunchbase account and no cookies. Two limits come straight from Crunchbase and apply to everyone who is not on a paid Crunchbase plan. First, a search returns at most 15 companies: Crunchbase serves a single page of 15 and refuses to paginate, so a search task exports 15 companies at most, however many matches it reports. Use the filters (industry, location, founded year, funding stage, employee count, operating status, company type, IPO status) to cut your market into as many 15-company windows as you need, or feed company URLs, which have no such limit. Second, the founding date and valuations are never served to a free session, and funding amounts are only published for a minority of companies: Crunchbase still shows the amount of a recent round on the public activity timeline of about one company in seven, and gates it everywhere else, so the funding amount fields are filled when it does and empty when it does not. One display note: the Results tab of your dashboard only shows the fields of the Company details option when that option is on, and it is off by default because on a search it costs one extra request per company. Company URLs return those fields for free on the very first request, and nothing is ever lost: the stored row, the CSV and the API export always carry every field we collected, whatever the toggle says.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "787abfafd394be3b12ee2ac7d14303fe",
+    "name": "Amazon Reviews Scraper",
+    "slug": "amazon-reviews-scraper",
+    "description": "Scrape reviews, ratings, and metadata from Amazon product pages. Supports all Amazon domains with cookie-based authentication.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "ac92974d3c1c9f8d3997767f090fa0b8",
+    "name": "Yelp Search Export",
+    "slug": "yelp-search-export",
+    "description": "Give us a keyword and a location. Grab all results available on Yelp. #phone included!",
+    "credits_per_row": {
+      "legacy": 7,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "83970312f2402accbb3553b326a2c8eb",
+    "name": "TripAdvisor Reviews Scraper",
+    "slug": "tripadvisor-reviews-scraper",
+    "description": "Extract reviews, ratings, user information, and owner responses from any TripAdvisor place",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "f781435f026b36b19ef74d591a077cb7",
+    "name": "TripAdvisor Restaurants Search Export",
+    "slug": "tripadvisor-restaurants-search-export",
+    "description": "Give us your properly built TripAdvisor Search URL. Grab all restaurants available. @mail and #phone included!",
+    "credits_per_row": {
+      "legacy": 40,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "7a8473daa49fb96711016aa655384bb3",
+    "name": "Quora Scraper",
+    "slug": "quora-scraper",
+    "description": "Scrape Quora questions, answers, profiles and topics",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "561d9028e73c59c9911c275b86073726",
+    "name": "Pinterest Scraper",
+    "slug": "pinterest-scraper",
+    "description": "Give us a Pinterest keyword, a search URL, a board URL, a profile URL or a single pin URL and we export every pin with its description, image, link, engagement counts, board and pinner details. Reads Pinterest's public web API, so no Pinterest account and no login are required.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "7308ae543e6abc70438d6b968d3a1b38",
+    "name": "Threads Scraper",
+    "slug": "threads-scraper",
+    "description": "Give us a Threads profile, a keyword, a tag or a single post URL and we export the posts with their full text, engagement counts, media, mentions and author details. Reads the public Threads pages, so no Threads or Instagram account is required.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "1b16ff414d27920fb325b68436dbf5fc",
+    "name": "Twitter Search Results Scraper",
+    "slug": "twitter-search-results-scraper",
+    "description": "Give us a Twitter Search URL. Grab all (all) tweets!",
+    "credits_per_row": {
+      "legacy": 2,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "6c5227261fbbd3430f926d409f4c44bf",
+    "name": "Twitter Profile Scraper",
+    "slug": "twitter-profile-scraper",
+    "description": "Scrape Twitter profile informations from a given username.",
+    "credits_per_row": {
+      "legacy": 2,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "5fc7b468267ec881344a11ac05c15a76",
+    "name": "TikTok Comments Scraper",
+    "slug": "tiktok-comments-scraper",
+    "description": "Give us a TikTok video URL and we will export every visible comment with author details and engagement metrics.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "dac422babfc7bf622b984646916e68f3",
+    "name": "TikTok Hashtag Scraper",
+    "slug": "tiktok-hashtag-scraper",
+    "description": "Give us a TikTok hashtag and we will export every video published under it, with author details, engagement metrics, and music info.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "66e9fbe07ae0a543576dc6ff241c229c",
+    "name": "YouTube Comments Scraper",
+    "slug": "youtube-comments-scraper",
+    "description": "Give us a YouTube video URL and we will export every comment with author details, engagement metrics and reply threads.",
+    "credits_per_row": {
+      "legacy": 0.5,
+      "current": 0.5
+    },
+    "is_available": true
+  },
+  {
+    "id": "2bfd28f2e9d6012d6d557072fda474da",
+    "name": "YouTube Search Scraper",
+    "slug": "youtube-search-scraper",
+    "description": "Give us a YouTube video URL and we return that video's details. Give us a YouTube channel URL and we return that channel's profile, or its Videos/Shorts/Live/Playlists tab if the URL points at one. Give us a hashtag URL, a playlist URL, a search-results URL, or just plain text, and we return a paginated list of matching videos -- exactly as if you had typed it into YouTube's own search bar, filters and all.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "f388a9866f943bc5c29bde8b33587bd3",
+    "name": "Realtor Property Listings Scraper",
+    "slug": "realtor-property-listings-scraper",
+    "description": "Collect all listings from Realtor Search URL!",
+    "credits_per_row": {
+      "legacy": 0.5,
+      "current": 0.5
+    },
+    "is_available": true
+  },
+  {
+    "id": "681a0d2e2641326f7b87cda35513618a",
+    "name": "Upwork Jobs Scraper",
+    "slug": "upwork-jobs-scraper",
+    "description": "Give us an Upwork jobs search URL, a keyword or a single job link and we will export every job posting with its full description, structured budget or hourly range, duration, required skills and — with the Job Details add-on — the client's country, spend, rating, payment verification and the exact number of proposals. Reads Upwork's public job pages, no Upwork account required.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "28ca7564a332a081a1dabda552d5c35b",
+    "name": "Naukri Jobs Scraper",
+    "slug": "naukri-jobs-scraper",
+    "description": "Give us a Naukri search URL — or just a keyword and a city — and we will export every job posting with title, company, location, experience, skills, salary and the full description. Reads Naukri's public job search, no account required, zero risk.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  },
+  {
+    "id": "ac02527b552b088c1f4ebe5a41d3d40a",
+    "name": "Similarweb Scraper",
+    "slug": "similarweb-scraper",
+    "description": "Give us a domain, a website URL, a Similarweb website page or a Similarweb ranking, and get the whole Similarweb profile: visits, bounce rate, pages per visit, visit duration, global, country and category ranks with their history, the marketing-channel ranking, keywords with their CPC, audience countries, age and gender, social networks, referrals, ads, technologies, competitors and company firmographics. Optional add-ons bring the exact monthly visit counts, the AI assistant traffic and the full metrics of the 10 closest competitors.",
+    "credits_per_row": {
+      "legacy": 1,
+      "current": 1
+    },
+    "is_available": true
+  }
+]
