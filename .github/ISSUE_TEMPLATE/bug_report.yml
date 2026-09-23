@@ -1,0 +1,45 @@
+name: Bug report
+description: Something in lobstr-mcp isn't working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. For a security vulnerability, please use
+        [Security Advisories](https://github.com/lobstrio/lobstr-mcp/security/advisories/new)
+        instead of a public issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The tool call(s), or a minimal example, that reproduce it.
+    validations:
+      required: false
+  - type: input
+    id: client
+    attributes:
+      label: MCP client
+      description: Claude Desktop, Claude Code, Cursor, ChatGPT, VS Code, etc., and its version.
+    validations:
+      required: false
+  - type: input
+    id: server-version
+    attributes:
+      label: Server version
+      description: From the `whoami` tool's `server_version`, if you have it.
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Tool response, error message, or logs. No API tokens or credentials.
+    validations:
+      required: false
