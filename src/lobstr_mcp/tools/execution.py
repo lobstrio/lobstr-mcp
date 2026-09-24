@@ -131,7 +131,16 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
                            "destructiveHint": False, "openWorldHint": True})
     def get_run(run_id: str, full: bool = False, toon: bool = False) -> dict:
         """Check the status/progress of a run. Returns JSON; pass toon=true for
-        compact TOON. Pass full=true to also include the raw stats blob."""
+        compact TOON. Pass full=true to also include the raw stats blob.
+
+        `is_done` is true only once the run itself finished AND (it has no
+        email-verification step, or that step finished too) AND its export is
+        done — not merely once scraping stopped. While verification is still
+        running after the run itself is "done", `status` reads
+        "verifying_emails" (credits for it are still being billed);
+        `run_status` always carries the API's own raw status regardless.
+        `email_verification` (when present) gives its own progress/counts,
+        `export_done` says whether the downloadable file is ready."""
         authz(RUN_READ_SCOPES)
         out = get_run_impl(client_factory(), run_id, full=full)
         return toon_result(out) if toon else out

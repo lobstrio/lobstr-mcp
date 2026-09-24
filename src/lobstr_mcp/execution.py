@@ -734,6 +734,30 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
     return result
 
 
+def _verification_out(detail: dict) -> dict | None:
+    """Trimmed `email_verification`; None when the run has no verification
+    step at all (different from one that hasn't started yet)."""
+    verification = detail.get("email_verification")
+    if not isinstance(verification, dict):
+        return None
+    return {"status": verification.get("status"),
+            "progress": verification.get("progress"),
+            "verified_emails": verification.get("verified_emails"),
+            "total_emails": verification.get("total_emails"),
+            "is_done": bool(verification.get("is_done"))}
+
+
+def _fully_done(stats_is_done, verification: dict | None, export_done) -> bool:
+    """Run done AND (no verification, or verification done) AND export done."""
+    if not stats_is_done:
+        return False
+    if verification is not None and not verification["is_done"]:
+        return False
+    if export_done is False:
+        return False
+    return True
+
+
 @structured
 def get_run_impl(client, run_id: str, full: bool = False) -> dict:
     stats = client.get_run_stats(run_id)
@@ -747,10 +771,24 @@ def get_run_impl(client, run_id: str, full: bool = False) -> dict:
         detail = client.get_run(run_id) or {}
     except LobstrAPIError:
         detail = {}
-    status = (detail.get("status") or stats.get("status")
-              or ("done" if stats.get("is_done") else "running"))
-    out = {"run_id": stats.get("id", run_id), "status": status,
-            "is_done": stats.get("is_done"),
+    run_status = (detail.get("status") or stats.get("status")
+                 or ("done" if stats.get("is_done") else "running"))
+    verification = _verification_out(detail)
+    export_done = detail.get("export_done")
+    is_done = _fully_done(stats.get("is_done"), verification, export_done)
+
+    status = run_status
+    note = None
+    if verification is not None and not verification["is_done"] and \
+            str(run_status).lower() in ("done", "success", "succeeded"):
+        status = "verifying_emails"
+        note = ("The run itself finished, but email verification is still running — "
+                "credits for it are still being billed and results aren't final. Poll "
+                "again; wait_for_run(run_id=...) can do this for you, bounded by a "
+                "timeout.")
+
+    out = {"run_id": stats.get("id", run_id), "status": status, "run_status": run_status,
+            "is_done": is_done,
             "progress": stats.get("percent_done"),
             "tasks_total": stats.get("total_tasks"),
             "tasks_done": stats.get("total_tasks_done"),
@@ -760,6 +798,12 @@ def get_run_impl(client, run_id: str, full: bool = False) -> dict:
             "done_reason": detail.get("done_reason_desc") or detail.get("done_reason"),
             "started_at": stats.get("started_at"),
             "ended_at": stats.get("ended_at"), "duration": stats.get("duration")}
+    if "email_verification" in detail:
+        out["email_verification"] = verification
+    if "export_done" in detail:
+        out["export_done"] = export_done
+    if note:
+        out["note"] = note
     # The raw stats blob duplicates the fields above; only ship it on request.
     if full:
         out["stats"] = stats

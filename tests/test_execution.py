@@ -219,6 +219,76 @@ def test_get_run_normalizes_status():
     assert out["run_id"] == "run1" and out["status"] == "running" and out["is_done"] is False
 
 
+def test_get_run_no_verification_is_unaffected():
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5},
+    }
+    out = get_run_impl(routed_client(routes), "run1")
+    assert out["status"] == "done"
+    assert out["run_status"] == "done"
+    assert out["is_done"] is True
+    assert "email_verification" not in out
+    assert "note" not in out
+
+
+def test_get_run_verification_pending_holds_off_done():
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5,
+                                   "email_verification": {"status": "PENDING", "progress": 0,
+                                                          "verified_emails": 0,
+                                                          "total_emails": 40, "is_done": False}},
+    }
+    out = get_run_impl(routed_client(routes), "run1")
+    assert out["status"] == "verifying_emails"
+    assert out["run_status"] == "done"  # the raw run status is still there
+    assert out["is_done"] is False  # not really finished yet
+    assert out["email_verification"] == {"status": "PENDING", "progress": 0,
+                                         "verified_emails": 0, "total_emails": 40,
+                                         "is_done": False}
+    assert "verification is still running" in out["note"]
+
+
+def test_get_run_verification_running_reports_progress():
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5,
+                                   "email_verification": {"status": "RUNNING", "progress": 40,
+                                                          "verified_emails": 16,
+                                                          "total_emails": 40, "is_done": False}},
+    }
+    out = get_run_impl(routed_client(routes), "run1")
+    assert out["status"] == "verifying_emails"
+    assert out["is_done"] is False
+    assert out["email_verification"]["progress"] == 40
+
+
+def test_get_run_verification_done_reports_finished():
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5,
+                                   "email_verification": {"status": "DONE", "progress": 100,
+                                                          "verified_emails": 40,
+                                                          "total_emails": 40, "is_done": True}},
+    }
+    out = get_run_impl(routed_client(routes), "run1")
+    assert out["status"] == "done"
+    assert out["is_done"] is True
+    assert "note" not in out
+
+
+def test_get_run_export_not_done_holds_off_is_done():
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5,
+                                   "export_done": False},
+    }
+    out = get_run_impl(routed_client(routes), "run1")
+    assert out["export_done"] is False
+    assert out["is_done"] is False
+
+
 def test_get_results_caps_and_selects_fields():
     rows = [{"title": f"t{i}", "address": f"a{i}", "phone": i} for i in range(5)]
     client = routed_client({("GET", "/v1/results"):
