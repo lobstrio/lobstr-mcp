@@ -144,6 +144,8 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
         `run_status` always carries the API's own raw status regardless.
         `email_verification` (when present) gives its own progress/counts,
         `export_done` says whether the downloadable file is ready.
+        `total_unique_results` sits next to `total_results`; get_results' own
+        total_results is the count to trust for fetchable rows.
 
         wait_for_run(run_id=...) polls this for you."""
         authz(RUN_READ_SCOPES)

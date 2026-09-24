@@ -290,6 +290,18 @@ def test_get_run_export_not_done_holds_off_is_done():
     assert out["is_done"] is False
 
 
+def test_get_run_total_unique_results_surfaced_with_note():
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5,
+                                   "total_results": 60, "total_unique_results": 42},
+    }
+    out = get_run_impl(routed_client(routes), "run1")
+    assert out["total_results"] == 60
+    assert out["total_unique_results"] == 42
+    assert "total_results_note" in out
+
+
 def test_wait_for_run_polls_until_done(monkeypatch):
     import lobstr_mcp.execution as execution_mod
     monkeypatch.setattr(execution_mod.time, "sleep", lambda s: None)

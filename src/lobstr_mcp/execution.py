@@ -800,6 +800,10 @@ def get_run_impl(client, run_id: str, full: bool = False) -> dict:
             "done_reason": detail.get("done_reason_desc") or detail.get("done_reason"),
             "started_at": stats.get("started_at"),
             "ended_at": stats.get("ended_at"), "duration": stats.get("duration")}
+    if "total_unique_results" in detail:
+        out["total_unique_results"] = detail.get("total_unique_results")
+        out["total_results_note"] = ("get_results' own total_results is the count to trust "
+                                     "for how many rows are fetchable, not either field here.")
     if "email_verification" in detail:
         out["email_verification"] = verification
     if "export_done" in detail:
