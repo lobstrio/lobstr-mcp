@@ -827,7 +827,9 @@ def get_run_impl(client, run_id: str, full: bool = False) -> dict:
     if full:
         out["stats"] = stats
         try:
-            out["credits_breakdown"] = client.get_run_credits(run_id)
+            credits = client.get_run_credits(run_id) or {}
+            out["credits_breakdown"] = {"total_credits": credits.get("total_credits"),
+                                        "breakdown": credits.get("breakdown")}
         except LobstrAPIError:
             pass  # older runs predate the credit ledger (404)
     return out
