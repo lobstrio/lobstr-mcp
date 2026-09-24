@@ -23,9 +23,11 @@ def _input_modes(items: list[dict]) -> dict | None:
 
     Some crawlers (e.g. Google Maps) split required inputs into groups — `url`
     in group "url", `category`/`country`/`city` in group "location" — where you
-    supply the fields of ONE group, not all. Ungrouped required fields (e.g.
-    `language`) are always required. Only kicks in when 2+ groups each carry a
-    required field; otherwise there are no alternatives to express.
+    supply the fields of ONE group, not all. Ungrouped required fields are
+    always required — unless they also carry a `default`, in which case, same
+    as the main schema's `required`, the default fills them when omitted and
+    they don't belong in `always` either. Only kicks in when 2+ groups each
+    carry a required field; otherwise there are no alternatives to express.
     """
     groups: dict[str, list[str]] = {}
     always: list[str] = []
@@ -33,6 +35,8 @@ def _input_modes(items: list[dict]) -> dict | None:
         if not it.get("required"):
             continue
         name, group = it["name"], it.get("group")
+        if not group and "default" in it:
+            continue
         if group:
             groups.setdefault(group, []).append(name)
         else:
@@ -247,6 +251,9 @@ def translate_input_schema(crawler: dict, params: dict | None = None) -> dict:
     required: list[str] = []
     levels: dict[str, str] = {}
     wire_names: dict[str, str] = {}
+    # required fields with a default: optional for the model, but the API
+    # won't apply the default, so callers send it
+    defaults_to_fill: dict = {}
 
     # A crawler's input[] can list the same name twice at different levels —
     # the live Google Maps scraper has a required task-level `country` and an
@@ -281,8 +288,12 @@ def translate_input_schema(crawler: dict, params: dict | None = None) -> dict:
 
     for name, item in seen.items():
         properties[name] = _property_from_item(item)
+        # grouped (input_modes) fields keep their group semantics
         if item.get("required"):
-            required.append(name)
+            if "default" in item and not item.get("group"):
+                defaults_to_fill[name] = item["default"]
+            else:
+                required.append(name)
         if name in shadowed:
             # /params lists this name in two sections at once, so it cannot say
             # where THIS entry goes; the tie-break above already decided, and
@@ -358,4 +369,6 @@ def translate_input_schema(crawler: dict, params: dict | None = None) -> dict:
     # `.get("wire_names") or {}`.
     if wire_names:
         out["wire_names"] = wire_names
+    if defaults_to_fill:
+        out["defaults_to_fill"] = defaults_to_fill
     return out

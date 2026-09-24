@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from dataclasses import dataclass
 
 _PY_TYPE_OK = {
@@ -19,23 +20,29 @@ _PY_TYPE_OK = {
 
 
 def validate_input(values: dict, json_schema: dict,
-                   input_modes: dict | None = None) -> list[str]:
+                   input_modes: dict | None = None,
+                   check_required: bool = True) -> list[str]:
     """Return a list of human-readable validation errors (empty if valid).
 
     `input_modes` (from the schema translator) expresses alternative input sets —
     e.g. Google Maps takes `url` OR `category`+`country`+`city`. When present, at
     least one complete alternative group must be supplied.
+
+    `check_required=False` skips the required/`input_modes` checks and only
+    type-checks fields present in `values` — for a squid re-run with
+    settings-only input, whose saved tasks already satisfy what's required.
     """
     errors: list[str] = []
     props = json_schema.get("properties", {})
-    for req in json_schema.get("required", []):
-        if req not in values:
-            errors.append(f"{req} is required")
-    if input_modes:
-        groups = input_modes.get("either") or []
-        if groups and not any(all(f in values for f in g) for g in groups):
-            opts = " OR ".join("(" + " + ".join(g) + ")" for g in groups)
-            errors.append(f"provide one of these input sets: {opts}")
+    if check_required:
+        for req in json_schema.get("required", []):
+            if req not in values:
+                errors.append(f"{req} is required")
+        if input_modes:
+            groups = input_modes.get("either") or []
+            if groups and not any(all(f in values for f in g) for g in groups):
+                opts = " OR ".join("(" + " + ".join(g) + ")" for g in groups)
+                errors.append(f"provide one of these input sets: {opts}")
     for key, val in values.items():
         spec = props.get(key)
         if not spec:
@@ -195,19 +202,54 @@ def estimate_cost(crawler: dict, task_count: int = 1,
     )
 
 
-def compute_idempotency_key(scraper: str, values: dict) -> str:
-    blob = scraper + "|" + json.dumps(values, sort_keys=True, default=str)
+# Explicit idempotency_key = caller's own retry token, normal (long) TTL.
+# A derived key (none given) only guards a retry storm, not a later re-run.
+DERIVED_IDEMPOTENCY_TTL = 120  # 2 minutes
+DEFAULT_IDEMPOTENCY_TTL = 24 * 3600  # 1 day, matches persistence.RedisIdempotencyStore
+
+
+def verification_cost_note(crawler: dict, auto_verify_emails: bool) -> str | None:
+    """None unless email verification is on; otherwise a note that a cost
+    estimate excludes it (billed separately after the scrape), sized from
+    credits_per_email when published."""
+    if not auto_verify_emails:
+        return None
+    rate = resolve_credit_rate(crawler.get("credits_per_email"))
+    if rate is not None:
+        return (f"auto_verify_emails is on for this run — the estimate does NOT include "
+               f"email verification, billed separately after the scrape at "
+               f"credits_per_email={rate} per email found; budget up to "
+               "credits_per_email x emails found on top of it.")
+    return ("auto_verify_emails is on for this run — the estimate does NOT include email "
+           "verification, billed separately after the scrape, and this crawler publishes "
+           "no credits_per_email to size it by; budget for it separately.")
+
+
+def compute_idempotency_key(user_scope: str, scraper: str, values: dict) -> str:
+    """Scoped per user (opaque, see LobstrClient.user_scope) so two callers
+    with the same scraper/input don't dedupe each other's runs."""
+    blob = user_scope + "|" + scraper + "|" + json.dumps(values, sort_keys=True, default=str)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
 class IdempotencyStore:
-    """Maps an idempotency key to the run_id it created (in-memory for now)."""
+    """Maps an idempotency key to the run_id it created (in-memory, TTL'd)."""
 
-    def __init__(self) -> None:
-        self._d: dict[str, str] = {}
+    def __init__(self, ttl: int = DEFAULT_IDEMPOTENCY_TTL) -> None:
+        self._d: dict[str, tuple[str, float | None]] = {}
+        self._ttl = ttl
 
     def get(self, key: str) -> str | None:
-        return self._d.get(key)
+        entry = self._d.get(key)
+        if entry is None:
+            return None
+        run_id, expires_at = entry
+        if expires_at is not None and time.time() >= expires_at:
+            del self._d[key]
+            return None
+        return run_id
 
-    def put(self, key: str, run_id: str) -> None:
-        self._d[key] = run_id
+    def put(self, key: str, run_id: str, ttl: int | None = None) -> None:
+        ttl = self._ttl if ttl is None else ttl
+        expires_at = (time.time() + ttl) if ttl else None
+        self._d[key] = (run_id, expires_at)

@@ -5,6 +5,43 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 [Semantic Versioning](https://semver.org/) and are pre-1.0, so a minor bump may change behaviour.
 The number lives in `pyproject.toml` and is read through `lobstr_mcp.__version__`.
 
+## [0.5.0] - 2026-09-24
+
+### Added
+
+- `update_scraper(squid_id, name?, config?, concurrency?)`: change a squid's settings without
+  running it (#4).
+- `wait_for_run(run_id, timeout_seconds<=50)`: poll a run to completion server-side (#16).
+- `get_run(full=true)` returns `credits_breakdown` (per-function credits/attempts) (#1/#21).
+- `get_run` surfaces `total_unique_results` next to `total_results` (#15).
+- `get_results_url` takes `format` (csv/xlsx/json/jsonl) (download format).
+
+### Changed
+
+- `create_squid`/`add_tasks`/`update_scraper` accept published input aliases (e.g.
+  `squid_country`), same as `run_scraper` (#13).
+- `create_squid` takes `concurrency` as a top-level field instead of silently dropping it from
+  `config` (#10).
+- `run_scraper(squid_id=..., input=...)` no longer rejects settings-only input (no task-level
+  field) on a squid re-run (#4).
+- `run_scraper` idempotency keys are scoped per user and a derived key (no `idempotency_key`
+  passed) only dedupes for ~2 minutes, not indefinitely (#20).
+- `get_run`'s `is_done`/`status` now account for email verification and export completion, not
+  just the run itself finishing (#2).
+- `estimate_run` and `run_scraper`'s pre-run estimate note when a squid's `auto_verify_emails` is
+  on, instead of silently omitting its cost (#3).
+- `check_credits`' `remaining` is reported unclamped, including negative (#22).
+- `get_scraper_details` notes when a ZIP/postal code in `city` returns nearby towns too (#17).
+- A required crawler input with a default is no longer marked required in the schema (#6).
+
+### Fixed
+
+- `create_squid`/`run_scraper` no longer leave an orphaned squid when the API rejects its config
+  after creation; the squid is deleted and the response says so (#14).
+- `get_results` honours `page_size` instead of capping rows at a fixed 10/25 regardless of it
+  (#12).
+- `whoami` no longer carries a `credits_note` field.
+
 ## [0.4.2] - 2026-09-23
 
 ### Fixed

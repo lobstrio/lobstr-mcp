@@ -38,10 +38,12 @@ def test_create_squid_with_config_saves_params():
     assert ("POST", "/v1/squids/sq1") in seen  # squid-level params persisted
 
 
-def test_create_squid_config_rejected_returns_squid_id_not_orphaned():
+def test_create_squid_config_rejected_deletes_the_orphan_and_says_so():
     # POST /v1/squids/sq1 (the config-apply call) rejected — the create call
-    # above it already succeeded, so the squid exists; losing its id here
-    # would make it unreachable, and a same-name retry would then fail too.
+    # above it already succeeded, so a squid exists with no usable config.
+    # Rather than leaving it behind (the old behaviour), this cleans it up:
+    # DELETE /v1/squids/sq1 (unhandled by the special-case below, so it falls
+    # through to the handler's default 200) succeeds.
     def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "POST" and request.url.path == "/v1/squids/sq1":
             return httpx.Response(400, json={"errors": {
@@ -53,11 +55,47 @@ def test_create_squid_config_rejected_returns_squid_id_not_orphaned():
                      transport=httpx.MockTransport(handler))
     out = create_squid_impl(c, CID, name="My", config={"enrich_emails": True})
     msg = out["message"]
-    # not a bare opaque error: the caller can still find and fix the squid
+    # squid_id is still reported (useful context / for a support ticket) even
+    # though the squid itself no longer exists.
     assert out["squid_id"] == "sq1"
     assert out["scraper"] == CID
     assert out["error_code"]
     assert out["upstream_status"] == 400  # a real rejection, unlike the transport case below
+    assert out["deleted"] is True
+    assert "sq1" in msg
+    assert "was deleted" in msg
+    assert "no concurrency slot spent" in msg
+    # deleted, so nothing left to reuse — must not point at run_scraper(squid_id=...)
+    # or deactivate_scraper(squid_id=...) for an id that no longer resolves.
+    assert "run_scraper" not in msg
+    assert "deactivate_scraper" not in msg
+    assert "call create_squid again" in msg
+
+
+def test_create_squid_config_rejected_and_cleanup_delete_also_fails_keeps_orphan():
+    # The rarer case: the config-apply call is rejected AND the cleanup
+    # delete itself fails — the squid really is left behind this time, so the
+    # response must say so plainly and give both ways to deal with it (the
+    # pre-fix wording), unlike the successful-cleanup path above.
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/v1/squids/sq1":
+            return httpx.Response(400, json={"errors": {
+                "message": "functions.enrich_emails is not a valid squid param",
+                "type": "InvalidParam", "code": 400}})
+        if request.method == "DELETE" and request.url.path == "/v1/squids/sq1":
+            return httpx.Response(500, json={"errors": {"message": "server error",
+                                                         "type": "ServerError", "code": 500}})
+        return httpx.Response(200, json={"/v1/squids": SQUID}.get(request.url.path, SQUID))
+
+    c = LobstrClient("https://api.lobstr.io/v1", "t",
+                     transport=httpx.MockTransport(handler))
+    out = create_squid_impl(c, CID, name="My", config={"enrich_emails": True})
+    msg = out["message"]
+    assert out["squid_id"] == "sq1"
+    assert out["scraper"] == CID
+    assert out["error_code"]
+    assert out["upstream_status"] == 400
+    assert out["deleted"] is False
     assert "sq1" in msg
     assert "run_scraper" in msg  # points at the actual fix path
     # It really was rejected — nothing saved — so this path (unlike the
@@ -160,6 +198,40 @@ def test_add_tasks_rejects_empty():
     assert out["error_code"] == "invalid_request"
 
 
+def test_estimate_run_notes_verification_cost_when_on_with_known_rate():
+    seen = []
+    c = client_for({
+        "/v1/squid/estimate": {"total_credits": 26},
+        "/v1/squids/sq1": {"id": "sq1", "crawler": CID, "auto_verify_emails": True},
+        f"/v1/crawlers/{CID}": {"id": CID, "credits_per_email": 1},
+    }, seen)
+    out = estimate_run_impl(c, "sq1")
+    assert out["total_credits"] == 26
+    assert "verification_note" in out
+    assert "does NOT include email verification" in out["verification_note"]
+    assert "credits_per_email=1" in out["verification_note"]
+
+
+def test_estimate_run_notes_verification_cost_when_rate_unknown():
+    c = client_for({
+        "/v1/squid/estimate": {"total_credits": 26},
+        "/v1/squids/sq1": {"id": "sq1", "crawler": CID, "auto_verify_emails": True},
+        f"/v1/crawlers/{CID}": {"id": CID},  # no credits_per_email published
+    })
+    out = estimate_run_impl(c, "sq1")
+    assert "verification_note" in out
+    assert "no credits_per_email to size it" in out["verification_note"]
+
+
+def test_estimate_run_has_no_verification_note_when_verification_is_off():
+    c = client_for({
+        "/v1/squid/estimate": {"total_credits": 26},
+        "/v1/squids/sq1": {"id": "sq1", "crawler": CID, "auto_verify_emails": False},
+    })
+    out = estimate_run_impl(c, "sq1")
+    assert "verification_note" not in out
+
+
 def test_estimate_run_surfaces_api_estimate():
     seen = []
     c = client_for({"/v1/squid/estimate": {
@@ -174,3 +246,21 @@ def test_estimate_run_surfaces_api_estimate():
     assert out["max_results"] == 800
     assert out["tasks"]["count"] == 8
     assert out["services"][0]["credits"] == 300
+
+
+def test_update_scraper_sends_saved_params_with_the_change():
+    import json
+    from lobstr_mcp.tools.primitives import update_scraper_impl
+    saved = {**SQUID, "params": {"language": "en", "max_results": 3,
+                                 "functions": {"a": True, "b": False}}}
+    bodies = []
+
+    def handler(request):
+        if request.method == "POST":
+            bodies.append(json.loads(request.content))
+            return httpx.Response(200, json={"id": "sq1", "name": "N"})
+        return httpx.Response(200, json=saved if request.url.path == "/v1/squids/sq1" else {})
+    c = LobstrClient("https://api.lobstr.io/v1", "t", transport=httpx.MockTransport(handler))
+    update_scraper_impl(c, "sq1", config={"max_results": 2, "functions": {"b": True}})
+    assert bodies[0]["params"] == {"language": "en", "max_results": 2,
+                                   "functions": {"a": True, "b": True}}

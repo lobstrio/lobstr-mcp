@@ -24,6 +24,26 @@ def test_maps_types_and_required():
     assert schema["required"] == ["url"]
 
 
+def test_required_field_with_a_default_is_not_required():
+    # A field the crawler marks required AND gives a default for isn't
+    # actually mandatory: the default fills it when omitted. Google Maps'
+    # `language` is exactly this shape — required=True, default="en" — and
+    # was listed in the JSON schema's `required`, which told a model to
+    # always pass it even though the crawler runs fine without it.
+    crawler = {"input": [
+        {"name": "url", "type": "string", "level": "task", "required": True},
+        {"name": "language", "type": "string", "level": "squid",
+         "required": True, "default": "en"},
+    ]}
+    out = translate_input_schema(crawler)
+    schema = out["json_schema"]
+    assert "language" not in schema["required"]
+    assert schema["required"] == ["url"]
+    # still published, with its default, so a model reading the schema can
+    # see and override it
+    assert schema["properties"]["language"]["default"] == "en"
+
+
 GM_GROUPED = {"input": [
     {"name": "url", "type": "string", "level": "task", "required": True, "group": "url"},
     {"name": "category", "type": "string", "level": "task", "required": True, "group": "location"},
@@ -41,8 +61,32 @@ def test_grouped_inputs_become_alternative_modes():
     assert ["url"] in m["either"]
     assert ["category", "country", "city"] in m["either"]  # required ones only (region excluded)
     assert m["always"] == ["language"]
-    # schema hard-requires only the always fields, not the grouped alternatives
-    assert out["json_schema"]["required"] == ["language"]
+
+
+def test_required_field_with_a_default_is_listed_to_fill():
+    crawler = {"input": [
+        {"name": "url", "type": "string", "level": "task", "required": True},
+        {"name": "language", "type": "string", "level": "squid",
+         "required": True, "default": "en"},
+    ]}
+    assert translate_input_schema(crawler)["defaults_to_fill"] == {"language": "en"}
+
+
+def test_grouped_inputs_ungrouped_required_field_with_default_is_not_always_required():
+    # Same shape as GM_GROUPED (the live Google Maps crawler), but `language`
+    # also has a default — the real shape (required=True, default="English
+    # (United States)"). input_modes["always"] is what a grouped crawler's
+    # schema_required is actually built from, not the plain `required` list,
+    # so the same default-check as the main schema's `required` has to apply
+    # here too, or a caller is told "language" is mandatory when it isn't.
+    crawler = {"input": [*GM_GROUPED["input"][:-1],
+                        {"name": "language", "type": "string", "level": "squid",
+                         "required": True, "default": "English (United States)"}]}
+    out = translate_input_schema(crawler)
+    m = out["input_modes"]
+    assert m is not None
+    assert m["always"] == []
+    assert "language" not in out["json_schema"]["required"]
 
 
 def test_no_modes_without_multiple_required_groups():

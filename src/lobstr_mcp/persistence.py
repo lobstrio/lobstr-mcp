@@ -128,8 +128,8 @@ class RedisIdempotencyStore:
             return None
         return raw.decode() if isinstance(raw, bytes) else str(raw)
 
-    def put(self, key: str, run_id: str) -> None:
-        self._r.set(_IDEM_PREFIX + key, run_id, ex=self._ttl)
+    def put(self, key: str, run_id: str, ttl: int | None = None) -> None:
+        self._r.set(_IDEM_PREFIX + key, run_id, ex=(self._ttl if ttl is None else ttl))
 
 
 class RedisClientRegistry:

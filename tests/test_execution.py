@@ -2,7 +2,8 @@ import json
 import httpx
 from lobstr_mcp.lobstr_client import LobstrClient
 from lobstr_mcp.safeguards import IdempotencyStore
-from lobstr_mcp.execution import run_scraper_impl, get_run_impl, get_results_impl
+from lobstr_mcp.execution import run_scraper_impl, get_run_impl, get_results_impl, \
+    wait_for_run_impl
 from lobstr_mcp.config import Settings
 
 SETTINGS = Settings(
@@ -62,6 +63,39 @@ def test_confirm_executes_and_returns_run_id():
     assert out["status"] == "pending"
 
 
+def test_new_squid_config_rejected_deletes_the_orphan_and_names_it():
+    # POST /v1/squids/sq1 (the settings-save call) is rejected — before the
+    # fix this propagated through @structured's generic handler with no
+    # squid_id at all, leaving an orphan the caller couldn't even find.
+    routes = happy_routes()
+    routes[("POST", "/v1/squids/sq1")] = lambda request, body: httpx.Response(
+        400, json={"errors": {"message": "max_results is not a valid squid param",
+                              "type": "InvalidParam", "code": 400}})
+    routes[("DELETE", "/v1/squids/sq1")] = {}
+    out = run_scraper_impl(routed_client(routes), SETTINGS, IdempotencyStore(), "gm",
+                           {"query": "x"}, confirm=True)
+    assert out["squid_id"] == "sq1"
+    assert out["scraper"] == "gm"
+    assert out["deleted"] is True
+    assert "was deleted" in out["message"]
+    assert "no concurrency slot spent" in out["message"]
+
+
+def test_new_squid_config_rejected_and_cleanup_fails_keeps_orphan_named():
+    routes = happy_routes()
+    routes[("POST", "/v1/squids/sq1")] = lambda request, body: httpx.Response(
+        400, json={"errors": {"message": "max_results is not a valid squid param",
+                              "type": "InvalidParam", "code": 400}})
+    routes[("DELETE", "/v1/squids/sq1")] = lambda request, body: httpx.Response(
+        500, json={"errors": {"message": "server error", "type": "ServerError", "code": 500}})
+    out = run_scraper_impl(routed_client(routes), SETTINGS, IdempotencyStore(), "gm",
+                           {"query": "x"}, confirm=True)
+    assert out["squid_id"] == "sq1"  # still named, even though it's now an orphan
+    assert out["deleted"] is False
+    assert "could not be saved" in out["message"]
+    assert "get_my_scraper(squid_id='sq1')" in out["message"]
+
+
 def test_insufficient_credits_is_the_apis_refusal_not_a_local_guess():
     """The API decides affordability, not this client — a low
     local balance figure alone starts the run; only the API's own
@@ -104,6 +138,77 @@ def test_idempotency_returns_same_run_without_re_executing():
     assert second["run_id"] == "run1" and second["idempotent"] is True
 
 
+def _client_with_token(routes, token):
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content) if request.content else None
+        resp = routes[(request.method, request.url.path)]
+        return resp(request, body) if callable(resp) else httpx.Response(200, json=resp)
+    return LobstrClient("https://api.lobstr.io/v1", token,
+                        transport=httpx.MockTransport(handler))
+
+
+def test_idempotency_is_scoped_per_user_not_shared():
+    # Two different callers (different tokens) running the same scraper with
+    # the same input must NOT dedupe against each other.
+    store = IdempotencyStore()
+    routes1 = happy_routes()
+    client1 = _client_with_token(routes1, "token-user-1")
+    first = run_scraper_impl(client1, SETTINGS, store, "gm", {"query": "x"}, confirm=True)
+    assert first["run_id"] == "run1"
+
+    routes2 = happy_routes()
+    routes2[("POST", "/v1/runs")] = {"id": "run2", "status": "pending"}
+    client2 = _client_with_token(routes2, "token-user-2")
+    second = run_scraper_impl(client2, SETTINGS, store, "gm", {"query": "x"}, confirm=True)
+    assert second.get("status") != "already_submitted"
+    assert second["run_id"] == "run2"
+
+
+def test_idempotency_without_a_key_only_dedupes_briefly(monkeypatch):
+    # A derived key (no idempotency_key passed) must not block a genuine
+    # re-run minutes/hours later — only a near-immediate retry (retry-storm
+    # protection). Simulate time passing well past DERIVED_IDEMPOTENCY_TTL.
+    import lobstr_mcp.safeguards as safeguards_mod
+
+    clock = {"t": 1_000_000.0}
+    monkeypatch.setattr(safeguards_mod.time, "time", lambda: clock["t"])
+
+    store = IdempotencyStore()
+    client1 = routed_client(happy_routes())
+    first = run_scraper_impl(client1, SETTINGS, store, "gm", {"query": "x"}, confirm=True)
+    assert first["run_id"] == "run1"
+
+    clock["t"] += 3600  # an hour later
+    routes2 = happy_routes()
+    routes2[("POST", "/v1/runs")] = {"id": "run2", "status": "pending"}
+    client2 = routed_client(routes2)
+    second = run_scraper_impl(client2, SETTINGS, store, "gm", {"query": "x"}, confirm=True)
+    assert second.get("status") != "already_submitted"
+    assert second["run_id"] == "run2"
+
+
+def test_idempotency_explicit_key_survives_longer_than_the_derived_one(monkeypatch):
+    # An explicit idempotency_key is the caller's own retry token: it must
+    # still dedupe after the short derived-key window has elapsed.
+    import lobstr_mcp.safeguards as safeguards_mod
+
+    clock = {"t": 1_000_000.0}
+    monkeypatch.setattr(safeguards_mod.time, "time", lambda: clock["t"])
+
+    store = IdempotencyStore()
+    client1 = routed_client(happy_routes())
+    first = run_scraper_impl(client1, SETTINGS, store, "gm", {"query": "x"},
+                             confirm=True, idempotency_key="my-retry-token")
+    assert first["run_id"] == "run1"
+
+    clock["t"] += 3600  # an hour later — past the derived TTL, not the explicit one
+    client2 = routed_client({("GET", "/v1/crawlers/gm"): CRAWLER_GM})
+    second = run_scraper_impl(client2, SETTINGS, store, "gm", {"query": "x"},
+                              confirm=True, idempotency_key="my-retry-token")
+    assert second["status"] == "already_submitted"
+    assert second["run_id"] == "run1"
+
+
 def test_get_run_normalizes_status():
     client = routed_client({
         ("GET", "/v1/runs/run1/stats"):
@@ -115,6 +220,160 @@ def test_get_run_normalizes_status():
     assert out["run_id"] == "run1" and out["status"] == "running" and out["is_done"] is False
 
 
+def test_get_run_no_verification_is_unaffected():
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5},
+    }
+    out = get_run_impl(routed_client(routes), "run1")
+    assert out["status"] == "done"
+    assert out["run_status"] == "done"
+    assert out["is_done"] is True
+    assert "email_verification" not in out
+    assert "note" not in out
+
+
+def test_get_run_verification_pending_holds_off_done():
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5,
+                                   "email_verification": {"status": "PENDING", "progress": 0,
+                                                          "verified_emails": 0,
+                                                          "total_emails": 40, "is_done": False}},
+    }
+    out = get_run_impl(routed_client(routes), "run1")
+    assert out["status"] == "verifying_emails"
+    assert out["run_status"] == "done"  # the raw run status is still there
+    assert out["is_done"] is False  # not really finished yet
+    assert out["email_verification"] == {"status": "PENDING", "progress": 0,
+                                         "verified_emails": 0, "total_emails": 40,
+                                         "is_done": False}
+    assert "verification is still running" in out["note"]
+
+
+def test_get_run_verification_running_reports_progress():
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5,
+                                   "email_verification": {"status": "RUNNING", "progress": 40,
+                                                          "verified_emails": 16,
+                                                          "total_emails": 40, "is_done": False}},
+    }
+    out = get_run_impl(routed_client(routes), "run1")
+    assert out["status"] == "verifying_emails"
+    assert out["is_done"] is False
+    assert out["email_verification"]["progress"] == 40
+
+
+def test_get_run_verification_done_reports_finished():
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5,
+                                   "email_verification": {"status": "DONE", "progress": 100,
+                                                          "verified_emails": 40,
+                                                          "total_emails": 40, "is_done": True}},
+    }
+    out = get_run_impl(routed_client(routes), "run1")
+    assert out["status"] == "done"
+    assert out["is_done"] is True
+    assert "note" not in out
+
+
+def test_get_run_export_not_done_holds_off_is_done():
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5,
+                                   "export_done": False},
+    }
+    out = get_run_impl(routed_client(routes), "run1")
+    assert out["export_done"] is False
+    assert out["is_done"] is False
+
+
+def test_get_run_total_unique_results_surfaced_with_note():
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5,
+                                   "total_results": 60, "total_unique_results": 42},
+    }
+    out = get_run_impl(routed_client(routes), "run1")
+    assert out["total_results"] == 60
+    assert out["total_unique_results"] == 42
+    assert "total_results_note" in out
+
+
+def test_wait_for_run_polls_until_done(monkeypatch):
+    import lobstr_mcp.execution as execution_mod
+    monkeypatch.setattr(execution_mod.time, "sleep", lambda s: None)
+    state = {"n": 0}
+
+    def stats_route(request, body):
+        state["n"] += 1
+        return httpx.Response(200, json={"id": "run1", "is_done": state["n"] >= 3})
+
+    def detail_route(request, body):
+        return httpx.Response(200, json={"id": "run1",
+                                         "status": "done" if state["n"] >= 3 else "running",
+                                         "credit_used": 5})
+
+    routes = {("GET", "/v1/runs/run1/stats"): stats_route,
+             ("GET", "/v1/runs/run1"): detail_route}
+    out = wait_for_run_impl(routed_client(routes), "run1", timeout_seconds=10)
+    assert out["is_done"] is True
+    assert out["status"] == "done"
+    assert state["n"] == 3  # polled more than once
+
+
+def test_wait_for_run_times_out_and_reports_still_running(monkeypatch):
+    import lobstr_mcp.execution as execution_mod
+    clock = {"t": 0.0}
+    monkeypatch.setattr(execution_mod.time, "monotonic", lambda: clock["t"])
+
+    def fake_sleep(s):
+        clock["t"] += s
+    monkeypatch.setattr(execution_mod.time, "sleep", fake_sleep)
+
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": False},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "running"},
+    }
+    out = wait_for_run_impl(routed_client(routes), "run1", timeout_seconds=5)
+    assert out["status"] == "still_running"
+    assert out["timed_out"] is True
+    assert out["run_id"] == "run1"
+
+
+def test_wait_for_run_caps_the_timeout_regardless_of_what_is_passed(monkeypatch):
+    import lobstr_mcp.execution as execution_mod
+    clock = {"t": 0.0}
+    monkeypatch.setattr(execution_mod.time, "monotonic", lambda: clock["t"])
+
+    def fake_sleep(s):
+        clock["t"] += s
+    monkeypatch.setattr(execution_mod.time, "sleep", fake_sleep)
+
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": False},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "running"},
+    }
+    wait_for_run_impl(routed_client(routes), "run1", timeout_seconds=999)
+    assert clock["t"] <= execution_mod._WAIT_MAX_TIMEOUT_SECONDS
+
+
+def test_wait_for_run_returns_an_error_immediately_without_polling(monkeypatch):
+    import lobstr_mcp.execution as execution_mod
+    monkeypatch.setattr(
+        execution_mod.time, "sleep",
+        lambda s: (_ for _ in ()).throw(AssertionError("must not sleep on an error")))
+
+    def stats_route(request, body):
+        return httpx.Response(404, json={"errors": {"message": "not found",
+                                                     "type": "HTTPNotFound", "code": 404}})
+    routes = {("GET", "/v1/runs/bad/stats"): stats_route}
+    out = wait_for_run_impl(routed_client(routes), "bad", timeout_seconds=5)
+    assert out["error_code"] == "not_found"
+
+
 def test_get_results_caps_and_selects_fields():
     rows = [{"title": f"t{i}", "address": f"a{i}", "phone": i} for i in range(5)]
     client = routed_client({("GET", "/v1/results"):
@@ -124,6 +383,20 @@ def test_get_results_caps_and_selects_fields():
     assert out["results"][0] == {"title": "t0"}
     assert set(out["available_fields"]) == {"title", "address", "phone"}
     assert out["total_results"] == 5
+
+
+def test_get_results_surfaces_free_plan_export_limit_cleanly():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"errors": {
+            "message": "You have reached the free plan limit of 30 results. "
+                       "Upgrade to a premium plan to access more results.",
+            "type": "ExportLimitReached", "code": 400}})
+    client = LobstrClient("https://api.lobstr.io/v1", "t",
+                          transport=httpx.MockTransport(handler))
+    out = get_results_impl(client, run_id="run1", page=4)
+    assert out["error_code"] == "export_limit_reached"
+    assert out["upstream_status"] == 400
+    assert "30 results" in out["message"]
 
 
 def test_get_results_requires_run_or_squid():
@@ -194,6 +467,18 @@ def test_squid_level_inputs_are_nested_under_params():
     assert body["params"] == {"max_results": 5}, body
     assert "max_results" not in body, "must not be sent flat"
     assert body.get("name"), "a name is required for the save to take effect"
+
+
+def test_omitted_required_default_is_sent_for_a_new_squid():
+    crawler = {**CRAWLER_WITH_SQUID_PARAM, "input": [
+        *CRAWLER_WITH_SQUID_PARAM["input"],
+        {"name": "language", "type": "string", "level": "squid",
+         "required": True, "default": "en"}]}
+    routes, seen = _capture_routes(crawler=crawler)
+    out = run_scraper_impl(routed_client(routes), SETTINGS, IdempotencyStore(), "gm",
+                           {"query": "x"}, confirm=True)
+    assert out.get("run_id") == "run1", out
+    assert seen["settings"][0]["params"]["language"] == "en"
 
 
 def test_upstream_failure_returns_the_structured_error_contract():
@@ -325,6 +610,56 @@ def test_get_results_default_cap_is_ten_full_is_twentyfive():
     assert get_results_impl(_results_client(rows), run_id="run1", full=True)["returned"] == 25
 
 
+def _paged_api_client(all_rows, seen_page_sizes=None):
+    """A mock /v1/results that actually respects page_size (unlike
+    _results_client, which always answers with every row regardless of what
+    was asked for) — the shape needed to catch get_results_impl truncating a
+    page the caller asked to be bigger."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        page_size = int(request.url.params.get("page_size", 10))
+        page = int(request.url.params.get("page", 1))
+        if seen_page_sizes is not None:
+            seen_page_sizes.append(page_size)
+        start = (page - 1) * page_size
+        page_rows = all_rows[start:start + page_size]
+        total_pages = max(1, -(-len(all_rows) // page_size))
+        return httpx.Response(200, json={"total_results": len(all_rows), "page": page,
+                                         "total_pages": total_pages, "data": page_rows})
+    return LobstrClient("https://api.lobstr.io/v1", "t",
+                        transport=httpx.MockTransport(handler))
+
+
+def test_get_results_page_size_is_honoured_not_capped_at_ten():
+    # Bug #12: a page_size of 50 used to still only return 10 rows (max_rows
+    # was fixed regardless of page_size), and the API's own page_size (sent as
+    # None) defaulted server-side to 10 while total_pages here still reported
+    # whatever the untouched page_size implied — the two never matched.
+    rows = [{"title": f"t{i}"} for i in range(50)]
+    seen = []
+    out = get_results_impl(_paged_api_client(rows, seen), run_id="run1", page_size=50)
+    assert seen == [50]
+    assert out["returned"] == 50
+    assert out["page_size"] == 50
+    assert out["total_pages"] == 1
+
+
+def test_get_results_page_size_defaults_match_what_is_sent_to_the_api():
+    rows = [{"title": f"t{i}"} for i in range(25)]
+    seen = []
+    out = get_results_impl(_paged_api_client(rows, seen), run_id="run1")
+    assert seen == [10]
+    assert out["returned"] == 10
+    assert out["total_pages"] == 3  # ceil(25/10), consistent with page_size actually used
+
+
+def test_get_results_page_size_is_capped_at_a_sane_max():
+    rows = [{"title": f"t{i}"} for i in range(500)]
+    seen = []
+    out = get_results_impl(_paged_api_client(rows, seen), run_id="run1", page_size=10_000)
+    assert seen == [100]
+    assert out["page_size"] == 100
+
+
 def test_run_scraper_accepts_a_slug():
     cid = "d" * 32
     routes = {
@@ -421,6 +756,43 @@ def test_run_scraper_reruns_existing_squid_as_is():
     out = run_scraper_impl(routed_client(routes), SETTINGS, IdempotencyStore(),
                            confirm=True, squid_id="sq1")
     assert out["run_id"] == "run2" and out["reused_squid"] is True
+
+
+def test_run_scraper_reuse_with_settings_only_input_is_not_rejected():
+    # Bug: re-running a squid with ONLY squid-level settings (no task-level
+    # field) used to be rejected by validate_input demanding the crawler's
+    # task-level required field (`query`) even though nothing about the task
+    # rows changed — the docstring promises this merges into saved settings
+    # and the saved tasks run as-is.
+    routes = {
+        ("GET", "/v1/squids/sq1"): {"id": "sq1", "crawler": "gm", "name": "My GM"},
+        ("GET", "/v1/crawlers/gm"): CRAWLER_WITH_SQUID_PARAM,
+        ("GET", "/v1/user/balance"): {"available": 1000},
+        ("GET", "/v1/tasks"): {"total_pages": 1, "page": 1,
+                               "data": [{"id": "t1", "params": {"query": "dentists"}}]},
+        ("POST", "/v1/squids/sq1"): {},
+        ("POST", "/v1/runs"): {"id": "run2", "status": "pending"},
+        # no ("POST", "/v1/tasks"): settings-only input must not touch task rows
+    }
+    out = run_scraper_impl(routed_client(routes), SETTINGS, IdempotencyStore(),
+                           confirm=True, squid_id="sq1", input={"max_results": 20})
+    assert "error_code" not in out, out
+    assert out["run_id"] == "run2"
+    assert out["tasks_action"] == "unchanged"
+
+
+def test_run_scraper_reuse_with_task_input_still_requires_task_fields():
+    # The other side of the same fix: adding a NEW task-level input on a squid
+    # that has none yet still needs that field's own required companions.
+    routes = {
+        ("GET", "/v1/squids/sq1"): {"id": "sq1", "crawler": "gm", "name": "My GM"},
+        ("GET", "/v1/crawlers/gm"): CRAWLER_GM_GROUPED,
+        ("GET", "/v1/user/balance"): {"available": 1000},
+        ("GET", "/v1/tasks"): {"total_pages": 1, "page": 1, "data": []},
+    }
+    out = run_scraper_impl(routed_client(routes), SETTINGS, IdempotencyStore(),
+                           confirm=True, squid_id="sq1", input={"category": "cafe"})
+    assert out["error_code"] == "validation_error"
 
 
 def test_run_scraper_needs_scraper_or_squid_id():
@@ -634,6 +1006,36 @@ def test_get_run_omits_raw_stats_by_default_and_includes_with_full():
         ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True,
                                          "percent_done": "100%"},
         ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5},
+        ("GET", "/v1/runs/run1/credits"): {"run_id": "run1", "total_credits": 5,
+                                           "breakdown": [{"function": "scrape",
+                                                         "credits": 5, "attempts": 10}]},
     }
     assert "stats" not in get_run_impl(routed_client(routes), "run1")
-    assert get_run_impl(routed_client(routes), "run1", full=True)["stats"]["id"] == "run1"
+    full = get_run_impl(routed_client(routes), "run1", full=True)
+    assert full["stats"]["id"] == "run1"
+    assert full["credits_breakdown"]["breakdown"][0]["function"] == "scrape"
+
+
+def test_get_run_full_tolerates_missing_credits_breakdown():
+    # Old runs predate the credit ledger — a 404 there must not fail the call.
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True,
+                                         "percent_done": "100%"},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5},
+        ("GET", "/v1/runs/run1/credits"): lambda r, b: httpx.Response(
+            404, json={"errors": {"message": "Run not found.", "type": "HTTPNotFound",
+                                  "code": 404}}),
+    }
+    out = get_run_impl(routed_client(routes), "run1", full=True)
+    assert "credits_breakdown" not in out
+    assert out["stats"]["id"] == "run1"
+
+
+def test_get_run_is_not_done_while_uploading():
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True,
+                                         "percent_done": "100%"},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "uploading",
+                                   "export_done": None},
+    }
+    assert get_run_impl(routed_client(routes), "run1")["is_done"] is False

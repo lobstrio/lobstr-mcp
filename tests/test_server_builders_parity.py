@@ -21,7 +21,7 @@ SETTINGS = Settings(
     consent_url="https://app.lobstr.io/connect-ai",
 )
 
-PRIMITIVES = {"create_squid", "add_tasks", "estimate_run"}
+PRIMITIVES = {"create_squid", "add_tasks", "update_scraper", "estimate_run"}
 
 
 def _tools(mcp) -> set[str]:
@@ -39,4 +39,4 @@ def test_all_three_builders_register_the_same_tools(monkeypatch):
     assert PRIMITIVES <= dev
     assert _tools(authenticated) == dev
     assert _tools(oauth) == dev
-    assert len(dev) == 20
+    assert len(dev) == 22  # +update_scraper, +wait_for_run

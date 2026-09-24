@@ -64,7 +64,29 @@ def test_list_runs():
 def test_get_results_url():
     c = client_for({"/v1/runs/r1/download": {"s3": "https://s3.example/results.csv"}})
     assert get_results_url_impl(c, "r1") == {
-        "run_id": "r1", "download_url": "https://s3.example/results.csv"}
+        "run_id": "r1", "format": "csv", "download_url": "https://s3.example/results.csv"}
+
+
+def test_get_results_url_passes_format_through():
+    seen = []
+    c = client_for({"/v1/runs/r1/download": {"s3": "https://s3.example/results.xlsx"}}, seen)
+    out = get_results_url_impl(c, "r1", format="xlsx")
+    assert out["format"] == "xlsx"
+    assert out["download_url"] == "https://s3.example/results.xlsx"
+
+
+def test_get_results_url_rejects_an_unknown_format():
+    c = client_for({})
+    out = get_results_url_impl(c, "r1", format="pdf")
+    assert out["error_code"] == "invalid_request"
+
+
+def test_get_results_url_reports_processing_instead_of_erroring():
+    c = client_for({"/v1/runs/r1/download": {"status": "processing", "progress": 40}})
+    out = get_results_url_impl(c, "r1", format="jsonl")
+    assert out["status"] == "processing"
+    assert out["progress"] == 40
+    assert "download_url" not in out
 
 
 def test_abort_run_posts_to_abort_when_running():

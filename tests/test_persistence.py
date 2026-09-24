@@ -106,6 +106,15 @@ def test_idempotency_entries_expire():
     assert 0 < shared.ttl(key) <= 60
 
 
+def test_idempotency_put_ttl_overrides_the_store_default():
+    # A derived (no explicit idempotency_key) run_scraper call passes a short
+    # ttl per-call; it must win over the store's own (long) default.
+    shared = r()
+    RedisIdempotencyStore(shared, ttl=86400).put("k", "run1", ttl=120)
+    key = next(k for k in shared.keys("*"))
+    assert 0 < shared.ttl(key) <= 120
+
+
 # --- DCR client registry -----------------------------------------------------
 
 def test_client_registry_roundtrip():

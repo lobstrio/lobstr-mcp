@@ -8,6 +8,7 @@ from lobstr_mcp.execution import (
     get_run_impl,
     list_runs_impl,
     run_scraper_impl,
+    wait_for_run_impl,
 )
 from lobstr_mcp.render import toon_result
 
@@ -75,7 +76,11 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
         steps that are on, so a re-run over many saved rows asks for
         confirmation where a single-row run would not. It is an upper bound
         (it assumes the row cap is reached); `estimate_run(squid_id=...)` is
-        the API's own figure. Affordability is the API's call, not this tool's:
+        the API's own figure. Neither includes email verification, billed
+        separately after the scrape when `auto_verify_emails` is on — when it
+        is, `estimate.verification_note` sizes it from `credits_per_email`;
+        add that on top yourself, it's never folded into `estimate.credits`.
+        Affordability is the API's call, not this tool's:
         it refuses an ordinary account whose period spend has reached its
         allowance and lets a staff/admin account run regardless — a refusal
         comes back as `insufficient_credits` with nothing spent, config and
@@ -99,6 +104,12 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
         whether the squid has an account attached now (true whether this call
         attached it or an earlier one did) — not whether this specific call
         was the one that attached it.
+
+        `idempotency_key`, when passed, is your own retry token: calling again
+        with it replays the same run_id. Without one, an identical call
+        (scraper/squid_id + input) is deduped for a couple of minutes only —
+        enough for a retry storm, not a genuine later re-run — and scoped to
+        your own account.
 
         If the API never answers (timeout, dropped connection), the error says
         which of two things happened, and they need different handling:
@@ -125,9 +136,35 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
                            "destructiveHint": False, "openWorldHint": True})
     def get_run(run_id: str, full: bool = False, toon: bool = False) -> dict:
         """Check the status/progress of a run. Returns JSON; pass toon=true for
-        compact TOON. Pass full=true to also include the raw stats blob."""
+        compact TOON. Pass full=true to also include the raw stats blob and a
+        `credits_breakdown` (per-function credits/attempts; omitted on older
+        runs).
+
+        `is_done` is true only once the run, any email verification, and its
+        export are all done — not merely once scraping stopped. While
+        verification is still running, `status` reads "verifying_emails"
+        (credits for it are still being billed); `run_status` always carries
+        the API's own raw status. `email_verification` (when present) gives
+        its own progress/counts, `export_done` says whether the downloadable
+        file is ready. `total_unique_results` sits next to `total_results`;
+        get_results' own total_results is the count to trust for fetchable
+        rows.
+
+        wait_for_run(run_id=...) polls this for you."""
         authz(RUN_READ_SCOPES)
         out = get_run_impl(client_factory(), run_id, full=full)
+        return toon_result(out) if toon else out
+
+    @mcp.tool(annotations={"title": "Wait For Run", "readOnlyHint": True,
+                           "destructiveHint": False, "openWorldHint": True})
+    def wait_for_run(run_id: str, timeout_seconds: float = 30.0,
+                     toon: bool = False) -> dict:
+        """Poll get_run until it's fully done or `timeout_seconds` elapses
+        (capped at 50s regardless of what's passed). Returns get_run's shape;
+        if still going, `status` is "still_running" and `timed_out: true` —
+        call again to keep checking."""
+        authz(RUN_READ_SCOPES)
+        out = wait_for_run_impl(client_factory(), run_id, timeout_seconds=timeout_seconds)
         return toon_result(out) if toon else out
 
     @mcp.tool(annotations={"title": "Get Results", "readOnlyHint": True,
@@ -137,11 +174,18 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
                     fields: list[str] | None = None, full: bool = False,
                     toon: bool = False) -> dict:
         """Retrieve one page of results for a run or squid. Returns JSON; pass
-        toon=true for compact TOON (fewer tokens). By default empty fields are
-        dropped and rows are capped for brevity; the response lists
+        toon=true for compact TOON (fewer tokens). `page_size` (default 10, 25
+        when full=true, capped at 100) is the number of rows fetched AND
+        returned — `returned`/`total_pages`/`next` all describe that same
+        page_size, so raising it is how you get more rows per call, not
+        `page`. By default empty fields are dropped; the response lists
         `available_fields` you can request via `fields`. Pass full=true to keep
-        every field (including empty ones) and more rows. Provide exactly one of
-        run_id or squid_id."""
+        every field (including empty ones) and a bigger default page. Provide
+        exactly one of run_id or squid_id.
+
+        Free-plan accounts are capped at the first 30 results by the API; past
+        that this returns `export_limit_reached` rather than more rows —
+        upgrading the plan is the only fix, not a different page_size."""
         authz(RESULTS_READ_SCOPES)
         out = get_results_impl(client_factory(), run_id=run_id, squid_id=squid_id,
                                page=page, page_size=page_size, fields=fields, full=full)
@@ -159,12 +203,15 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
 
     @mcp.tool(annotations={"title": "Get Results Download URL", "readOnlyHint": True,
                            "destructiveHint": False, "openWorldHint": True})
-    def get_results_url(run_id: str) -> dict:
+    def get_results_url(run_id: str, format: str = "csv") -> dict:
         """Get a signed URL to download a run's full result set as a file — use
         this instead of get_results when the caller wants the whole dataset
-        rather than paged rows."""
+        rather than paged rows. `format` is "csv" (default), "xlsx", "json" or
+        "jsonl". A format other than csv on a large run can take a moment to
+        build server-side; when it isn't ready yet this returns
+        `status: "processing"` instead of `download_url` — call again shortly."""
         authz(RESULTS_READ_SCOPES)
-        return get_results_url_impl(client_factory(), run_id)
+        return get_results_url_impl(client_factory(), run_id, format=format)
 
     @mcp.tool(annotations={"title": "Abort Run",
                            "readOnlyHint": False, "destructiveHint": False,

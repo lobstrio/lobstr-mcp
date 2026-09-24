@@ -14,6 +14,7 @@ MCP-specific surface on top:
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from contextlib import contextmanager
 from typing import Any, Iterator
@@ -140,6 +141,12 @@ class LobstrClient:
         with _as_lobstr_error(f"/runs/{run_hash}"):
             return self._sdk.runs.get(run_hash).raw
 
+    def get_run_credits(self, run_hash: str) -> dict:
+        """Per-function credit breakdown: total + [{function, credits,
+        attempts}, ...]."""
+        with _as_lobstr_error(f"/runs/{run_hash}/credits"):
+            return self._llhttp.get(f"/runs/{run_hash}/credits")
+
     def get_balance(self) -> dict:
         with _as_lobstr_error("/user/balance"):
             return self._sdk.balance().raw
@@ -152,9 +159,16 @@ class LobstrClient:
         with _as_lobstr_error("/runs"):
             return [r.raw for r in self._sdk.runs.list(squid=squid_hash, limit=limit)]
 
-    def get_run_download_url(self, run_hash: str) -> str:
+    def get_run_download_url(self, run_hash: str, file_format: str | None = None):
+        """A signed download URL, or `{"status": "processing", ...}` when a
+        non-default format on a large run is still being built — not an
+        error, the caller should retry."""
+        params = {"file_format": file_format} if file_format else None
         with _as_lobstr_error(f"/runs/{run_hash}/download"):
-            return self._sdk.runs.download_url(run_hash)
+            data = self._llhttp.get(f"/runs/{run_hash}/download", params=params)
+        if isinstance(data, dict) and "s3" in data:
+            return data["s3"]
+        return data
 
     def abort_run(self, run_hash: str) -> dict:
         with _as_lobstr_error(f"/runs/{run_hash}/abort"):
@@ -213,6 +227,11 @@ class LobstrClient:
         with _as_lobstr_error(f"/squids/{squid_hash}"):
             return self._llhttp.post(f"/squids/{squid_hash}", json=settings)
 
+    def delete_squid(self, squid_hash: str) -> dict:
+        """Delete a squid outright (not reversible, unlike deactivate/empty)."""
+        with _as_lobstr_error(f"/squids/{squid_hash}"):
+            return self._sdk.squids.delete(squid_hash)
+
     def add_tasks(self, squid_hash: str, tasks: list[dict]) -> dict:
         with _as_lobstr_error("/tasks"):
             return self._llhttp.post("/tasks", json={"squid": squid_hash, "tasks": tasks})
@@ -241,6 +260,12 @@ class LobstrClient:
             params["page_size"] = page_size
         with _as_lobstr_error("/results"):
             return self._llhttp.get("/results", params=params)
+
+    def user_scope(self) -> str:
+        """Opaque, stable-per-identity string for scoping local state (the
+        idempotency store) — never the raw token."""
+        auth_header = self._http.headers.get("authorization", "")
+        return hashlib.sha256(auth_header.encode("utf-8")).hexdigest()[:32]
 
     def close(self) -> None:
         self._sdk.close()

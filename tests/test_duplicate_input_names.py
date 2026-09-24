@@ -155,14 +155,15 @@ def test_the_alias_description_tells_the_two_apart():
 
 
 def test_the_alias_is_optional_and_input_modes_are_unchanged():
-    """`country` is required task-level but sits in input_modes.either, so the
-    published `required` stays just ["language"] — the alias must not add to
-    either of those."""
+    """`country` is required task-level but sits in input_modes.either.
+    `language` is required but also carries a default (the live shape), so it
+    is not actually mandatory — published `required`/`always` are empty; the
+    alias must not add to either of those."""
     out = translate_input_schema(CRAWLER, params=PARAMS)
     schema, modes = out["json_schema"], out["input_modes"]
-    assert schema["required"] == ["language"]
+    assert schema["required"] == []
     assert modes["either"] == [["url"], ["category", "country", "city"]]
-    assert modes["always"] == ["language"]
+    assert modes["always"] == []
     assert all("squid_country" not in g for g in modes["either"])
     assert validate_input({"category": "dentist", "city": "Paris",
                            "country": "France", "language": "French",

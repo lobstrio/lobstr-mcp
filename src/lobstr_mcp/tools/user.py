@@ -48,7 +48,8 @@ _UNKNOWN_INTERVAL_NOTE = (
 )
 _REMAINING_NOTE = (
     "remaining = available - consumed, the figure to budget a run against; 0 "
-    "means nothing is left for the period this account is on."
+    "means nothing is left, and it can go negative (the account is over its "
+    "period's allowance, not merely at zero)."
 )
 
 _SLOTS_NOTE = (
@@ -93,12 +94,15 @@ def _remaining(available, consumed):
     (`ClusterEstimationView`: `available_credits = available - consumed`); this
     reports the same quantity instead of leaving it to be inferred. Null when
     either figure is missing, rather than guessing one to be zero.
+
+    Reported as-is, never clamped to 0: a negative figure is real (an
+    overspent period) and clamping it hid that from the model.
     """
     if not isinstance(available, (int, float)) or isinstance(available, bool):
         return None
     if not isinstance(consumed, (int, float)) or isinstance(consumed, bool):
         return None
-    return max(0, available - consumed)
+    return available - consumed
 
 
 def _slots_note(used, total) -> str:
@@ -159,11 +163,6 @@ def whoami_impl(client: LobstrClient) -> dict:
         "plan": plan.get("name"),
         "plan_status": plan.get("status"),
         "credit_interval": u.get("credit_interval"),
-        "credits_note": (
-            "No credit figure is reported here; check_credits is the only tool "
-            "that reports credits and slots. credit_interval says which period "
-            "those figures will cover ('daily' = today only)."
-        ),
         "server_version": __version__,
     }
 
@@ -181,7 +180,9 @@ def register_user_tools(mcp, client_factory, authorizer=None) -> None:
 
         **Budget a run against `remaining`, not `available`.** `available` is an
         allowance with nothing taken off it; `remaining` is
-        `available - consumed`, which is what can still be spent.
+        `available - consumed`, which is what can still be spent. Not floored
+        at 0: a negative `remaining` means the account is over its period's
+        allowance, not merely "nothing left".
 
         What period the three figures cover depends on `interval`, and
         `reset_time` is when that counter rolls over:

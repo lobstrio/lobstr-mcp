@@ -37,10 +37,18 @@ def test_estimate_cost_from_numeric_hint():
 
 
 def test_idempotency_key_is_stable_and_order_insensitive():
-    a = compute_idempotency_key("gm", {"query": "x", "pages": 2})
-    b = compute_idempotency_key("gm", {"pages": 2, "query": "x"})
-    c = compute_idempotency_key("gm", {"query": "y"})
+    a = compute_idempotency_key("user1", "gm", {"query": "x", "pages": 2})
+    b = compute_idempotency_key("user1", "gm", {"pages": 2, "query": "x"})
+    c = compute_idempotency_key("user1", "gm", {"query": "y"})
     assert a == b and a != c
+
+
+def test_idempotency_key_is_scoped_per_user():
+    # Same scraper, same input, different callers: must NOT collide, or one
+    # user's run comes back to another user as `already_submitted`.
+    a = compute_idempotency_key("user1", "gm", {"query": "x"})
+    b = compute_idempotency_key("user2", "gm", {"query": "x"})
+    assert a != b
 
 
 def test_idempotency_store():
@@ -48,6 +56,17 @@ def test_idempotency_store():
     assert s.get("k") is None
     s.put("k", "run1")
     assert s.get("k") == "run1"
+
+
+def test_idempotency_store_entry_expires():
+    s = IdempotencyStore()
+    s.put("k", "run1", ttl=-1)  # already expired
+    assert s.get("k") is None
+
+
+def test_idempotency_store_default_ttl_is_not_forever():
+    from lobstr_mcp.safeguards import DEFAULT_IDEMPOTENCY_TTL
+    assert DEFAULT_IDEMPOTENCY_TTL is not None and DEFAULT_IDEMPOTENCY_TTL > 0
 
 
 def test_estimate_cost_reports_the_per_row_rate():

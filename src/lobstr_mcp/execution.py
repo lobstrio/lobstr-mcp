@@ -15,6 +15,8 @@ require `account:read` too.
 """
 from __future__ import annotations
 
+import time
+
 import httpx
 
 from lobstr_mcp.account_linking import (
@@ -28,10 +30,12 @@ from lobstr_mcp.account_linking import (
 from lobstr_mcp.errors import LobstrAPIError, structured, to_error_dict, transport_error_dict
 from lobstr_mcp.lobstr_client import resolve_crawler_id
 from lobstr_mcp.safeguards import (
+    DERIVED_IDEMPOTENCY_TTL,
     CostEstimate,
     compute_idempotency_key,
     estimate_cost,
     validate_input,
+    verification_cost_note,
 )
 from lobstr_mcp.schema_translator import translate_input_schema
 
@@ -41,9 +45,12 @@ _FUNCTION_LEVEL = "function"
 _RESULT_LIST_KEYS = ("data", "results", "records")
 
 
-def _estimate_dict(est: CostEstimate) -> dict:
-    return {"credits": est.credits, "basis": est.basis, "currency": est.currency,
-            "rate_per_row": est.rate}
+def _estimate_dict(est: CostEstimate, verification_note: str | None = None) -> dict:
+    out = {"credits": est.credits, "basis": est.basis, "currency": est.currency,
+           "rate_per_row": est.rate}
+    if verification_note:
+        out["verification_note"] = verification_note
+    return out
 
 
 def _redact_account_error(error: dict) -> dict:
@@ -76,6 +83,30 @@ def _redact_account_error(error: dict) -> dict:
 
 def _detail(exc: Exception) -> str:
     return str(exc) or type(exc).__name__
+
+
+def _new_squid_write_failed(client, squid_id: str, scraper: str, base: dict) -> dict:
+    """Config/tasks write on a squid run_scraper just created was rejected —
+    delete the now-useless squid instead of leaving an orphan, and name
+    squid_id either way (mirrors create_squid_impl's own rejection handling)."""
+    deleted = False
+    try:
+        client.delete_squid(squid_id)
+        deleted = True
+    except Exception:
+        deleted = False
+    base = dict(base)
+    base["squid_id"] = squid_id
+    base["scraper"] = scraper
+    base["deleted"] = deleted
+    tail = ((f" Squid {squid_id} (created for this call) was deleted, so nothing is left "
+            "behind — no concurrency slot spent. Fix the input and call run_scraper again.")
+           if deleted else
+           (f" Squid {squid_id} was created but its configuration could not be saved, and "
+            "the automatic cleanup delete also failed — it still exists with no usable "
+            f"config. Check get_my_scraper(squid_id='{squid_id}') or delete it by hand."))
+    base["message"] = f"{base['message']}{tail}"
+    return base
 
 
 def _snapshot_tasks(client, squid_id: str) -> tuple[list[dict] | None, int]:
@@ -433,14 +464,32 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
     # only; everything below sends the real name.
     wire_names = translated.get("wire_names") or {}
 
-    # Validate only when applying new input. Reusing a squid with no input
-    # re-runs it as-is, so its already-saved (valid) config stands.
+    # Settings-only input on a reused squid (no task-level field) merges into
+    # saved config and touches no task row, so task-level required fields
+    # don't apply — only when a task-level field is being added/replaced.
     if input or not reuse:
-        errors = validate_input(input, schema, input_modes=input_modes)
+        has_task_input = any(
+            levels.get(k) not in _SQUID_LEVELS and levels.get(k) != _FUNCTION_LEVEL
+            for k in input)
+        check_required = (not reuse) or has_task_input
+        errors = validate_input(input, schema, input_modes=input_modes,
+                                check_required=check_required)
         if errors:
             return {"error_code": "validation_error", "errors": errors}
+    # The API doesn't apply a declared default itself; send it for a new squid.
+    if not reuse:
+        input = {**(translated.get("defaults_to_fill") or {}), **input}
 
-    key = idempotency_key or compute_idempotency_key(squid_id or scraper, input)
+    # Scoped per user so different callers never dedupe each other. An
+    # explicit key is the caller's own retry token (normal TTL); a derived
+    # one only guards a retry storm, not a genuine later re-run.
+    user_scope = client.user_scope()
+    if idempotency_key:
+        key = f"{user_scope}:{idempotency_key}"
+        key_ttl = None
+    else:
+        key = "derived:" + compute_idempotency_key(user_scope, squid_id or scraper, input)
+        key_ttl = DERIVED_IDEMPOTENCY_TTL
     existing = idem_store.get(key)
     if existing:
         return {"status": "already_submitted", "run_id": existing, "idempotent": True}
@@ -526,6 +575,12 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
                         max_results_per_task=effective.get("max_results"),
                         run_result_cap=effective.get("max_unique_results_per_run"),
                         settings=effective)
+    # auto_verify_emails is a squid-level column, not in `params`/`effective`;
+    # read it from this call's input, else the reused squid's saved value.
+    effective_auto_verify = squid_params.get("auto_verify_emails")
+    if effective_auto_verify is None and reuse:
+        effective_auto_verify = existing_squid.get("auto_verify_emails")
+    verification_note = verification_cost_note(crawler, bool(effective_auto_verify))
     if not confirm and (est.credits is None or est.credits > settings.run_confirm_threshold):
         msg = ("Cost cannot be estimated before running; confirm to proceed."
                if est.credits is None else
@@ -537,7 +592,7 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
         elif rows_this_run is None:
             msg += (" How many input rows this scraper holds could not be read, so the "
                     "estimate covers one row and the real total may be a multiple of it.")
-        return {"needs_confirmation": True, "estimate": _estimate_dict(est),
+        return {"needs_confirmation": True, "estimate": _estimate_dict(est, verification_note),
                 "message": msg, "rows_this_run": rows_this_run,
                 "hint": "call run_scraper again with confirm=true to execute"}
 
@@ -620,8 +675,20 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
         }
         if accounts_to_save:
             update_body["accounts"] = accounts_to_save
-        client.update_squid(squid_id, update_body)
-        client.add_tasks(squid_id, [task_params])
+        # A rejected write here used to lose squid_id entirely (generic
+        # handler); now delete the orphan on a confirmed rejection, or keep
+        # it and say so on a transport failure (unknown if it landed).
+        try:
+            client.update_squid(squid_id, update_body)
+            client.add_tasks(squid_id, [task_params])
+        except LobstrAPIError as exc:
+            return _new_squid_write_failed(client, squid_id, scraper, to_error_dict(exc))
+        except httpx.TransportError as exc:
+            failed = transport_error_dict(
+                exc, verify_with=f"get_my_scraper(squid_id='{squid_id}')")
+            failed["squid_id"] = squid_id
+            failed["scraper"] = scraper
+            return failed
         tasks_action, task_count = "created", 1
 
     # Config and rows are written; only POST /runs itself can still fail, and
@@ -638,14 +705,14 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
                  transport_error_dict(exc, verify_with="list_runs(squid_id=...)"))
         failed |= {"squid_id": squid_id, "scraper": scraper,
                   "tasks_action": tasks_action, "task_count": task_count,
-                  "estimate": _estimate_dict(est)}
+                  "estimate": _estimate_dict(est, verification_note)}
         if remaining is not None:
             failed["remaining"] = remaining
         if tasks_action == "replaced":
             return _restore_tasks(client, squid_id, (saved_rows, saved_count), failed)
         return failed
     run_id = run["id"]
-    idem_store.put(key, run_id)
+    idem_store.put(key, run_id, ttl=key_ttl)
 
     # account_attached answers "does this squid have an account attached now",
     # not "did this call attach one" — a reused squid whose account was
@@ -667,7 +734,7 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
     # bill.
     result = {"run_id": run_id, "squid_id": squid_id, "scraper": scraper,
               "reused_squid": reuse, "status": run.get("status"),
-              "estimate": _estimate_dict(est), "submitted_input": input,
+              "estimate": _estimate_dict(est, verification_note), "submitted_input": input,
               "account_attached": account_attached,
               "tasks_action": tasks_action, "task_count": task_count,
               "tasks_note": _tasks_note(tasks_action, task_count, replaced_count)}
@@ -680,6 +747,34 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
     if credit_warning:
         result["credit_warning"] = credit_warning
     return result
+
+
+def _verification_out(detail: dict) -> dict | None:
+    """Trimmed `email_verification`; None when the run has no verification
+    step at all (different from one that hasn't started yet)."""
+    verification = detail.get("email_verification")
+    if not isinstance(verification, dict):
+        return None
+    return {"status": verification.get("status"),
+            "progress": verification.get("progress"),
+            "verified_emails": verification.get("verified_emails"),
+            "total_emails": verification.get("total_emails"),
+            "is_done": bool(verification.get("is_done"))}
+
+
+_UNFINISHED_RUN_STATES = {"pending", "running", "uploading"}
+
+
+def _fully_done(stats_is_done, verification: dict | None, export_done,
+                run_status=None) -> bool:
+    """Run done AND (no verification, or verification done) AND export done."""
+    if not stats_is_done or str(run_status).lower() in _UNFINISHED_RUN_STATES:
+        return False
+    if verification is not None and not verification["is_done"]:
+        return False
+    if export_done is False:
+        return False
+    return True
 
 
 @structured
@@ -695,10 +790,24 @@ def get_run_impl(client, run_id: str, full: bool = False) -> dict:
         detail = client.get_run(run_id) or {}
     except LobstrAPIError:
         detail = {}
-    status = (detail.get("status") or stats.get("status")
-              or ("done" if stats.get("is_done") else "running"))
-    out = {"run_id": stats.get("id", run_id), "status": status,
-            "is_done": stats.get("is_done"),
+    run_status = (detail.get("status") or stats.get("status")
+                 or ("done" if stats.get("is_done") else "running"))
+    verification = _verification_out(detail)
+    export_done = detail.get("export_done")
+    is_done = _fully_done(stats.get("is_done"), verification, export_done, run_status)
+
+    status = run_status
+    note = None
+    if verification is not None and not verification["is_done"] and \
+            str(run_status).lower() in ("done", "success", "succeeded"):
+        status = "verifying_emails"
+        note = ("The run itself finished, but email verification is still running — "
+                "credits for it are still being billed and results aren't final. Poll "
+                "again; wait_for_run(run_id=...) can do this for you, bounded by a "
+                "timeout.")
+
+    out = {"run_id": stats.get("id", run_id), "status": status, "run_status": run_status,
+            "is_done": is_done,
             "progress": stats.get("percent_done"),
             "tasks_total": stats.get("total_tasks"),
             "tasks_done": stats.get("total_tasks_done"),
@@ -708,9 +817,57 @@ def get_run_impl(client, run_id: str, full: bool = False) -> dict:
             "done_reason": detail.get("done_reason_desc") or detail.get("done_reason"),
             "started_at": stats.get("started_at"),
             "ended_at": stats.get("ended_at"), "duration": stats.get("duration")}
+    if "total_unique_results" in detail:
+        out["total_unique_results"] = detail.get("total_unique_results")
+        out["total_results_note"] = ("get_results' own total_results is the count to trust "
+                                     "for how many rows are fetchable, not either field here.")
+    if "email_verification" in detail:
+        out["email_verification"] = verification
+    if "export_done" in detail:
+        out["export_done"] = export_done
+    if note:
+        out["note"] = note
     # The raw stats blob duplicates the fields above; only ship it on request.
     if full:
         out["stats"] = stats
+        try:
+            credits = client.get_run_credits(run_id) or {}
+            out["credits_breakdown"] = {"total_credits": credits.get("total_credits"),
+                                        "breakdown": credits.get("breakdown")}
+        except LobstrAPIError:
+            pass  # older runs predate the credit ledger (404)
+    return out
+
+
+# Bounded well under a typical MCP client request timeout.
+_WAIT_MAX_TIMEOUT_SECONDS = 50.0
+_WAIT_POLL_INTERVAL_SECONDS = 2.0
+
+
+@structured
+def wait_for_run_impl(client, run_id: str, timeout_seconds: float = 30.0) -> dict:
+    """Poll get_run until `is_done` or `timeout_seconds` elapses, bounded at
+    `_WAIT_MAX_TIMEOUT_SECONDS` regardless of what's asked."""
+    timeout_seconds = max(1.0, min(timeout_seconds, _WAIT_MAX_TIMEOUT_SECONDS))
+    deadline = time.monotonic() + timeout_seconds
+
+    out = get_run_impl(client, run_id)
+    while not out.get("is_done") and "error_code" not in out:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(_WAIT_POLL_INTERVAL_SECONDS, remaining))
+        out = get_run_impl(client, run_id)
+
+    if "error_code" in out:
+        return out
+    if not out.get("is_done"):
+        out = dict(out)
+        out["status"] = "still_running"
+        out["timed_out"] = True
+        out["message"] = (f"Still running after {timeout_seconds:.0f}s — call "
+                          f"wait_for_run(run_id='{run_id}') again, or poll get_run "
+                          f"(run_id='{run_id}') directly.")
     return out
 
 
@@ -722,6 +879,11 @@ def _strip_empty(row: dict) -> dict:
             if v is not None and v != "" and v != [] and v != {}}
 
 
+_DEFAULT_PAGE_SIZE = 10
+_FULL_DEFAULT_PAGE_SIZE = 25
+_MAX_PAGE_SIZE = 100
+
+
 @structured
 def get_results_impl(client, *, run_id: str | None = None, squid_id: str | None = None,
                      page: int = 1, page_size: int | None = None,
@@ -731,10 +893,17 @@ def get_results_impl(client, *, run_id: str | None = None, squid_id: str | None 
         return {"error_code": "invalid_request",
                 "message": "provide run_id or squid_id (exactly one)"}
 
-    if max_rows is None:
-        max_rows = 25 if full else 10
+    # page_size is what's sent to the API and what total_pages/next describe;
+    # max_rows follows it (used to be fixed at 10/25 regardless of page_size).
+    effective_page_size = page_size if page_size else (
+        _FULL_DEFAULT_PAGE_SIZE if full else _DEFAULT_PAGE_SIZE)
+    effective_page_size = max(1, min(effective_page_size, _MAX_PAGE_SIZE))
+    max_rows = effective_page_size if max_rows is None else min(max_rows, effective_page_size)
 
-    payload = client.get_results(run=run_id, squid=squid_id, page=page, page_size=page_size)
+    # Free-plan accounts are capped at 30 results (API's ExportLimitReached);
+    # that propagates as a normal structured error, not caught here.
+    payload = client.get_results(run=run_id, squid=squid_id, page=page,
+                                 page_size=effective_page_size)
 
     records: list = []
     for k in _RESULT_LIST_KEYS:
@@ -753,6 +922,7 @@ def get_results_impl(client, *, run_id: str | None = None, squid_id: str | None 
         capped = [_strip_empty(r) if isinstance(r, dict) else r for r in capped]
     return {"total_results": payload.get("total_results"),
             "page": payload.get("page", page),
+            "page_size": effective_page_size,
             "total_pages": payload.get("total_pages"),
             "returned": len(capped),
             "available_fields": available_fields,
@@ -801,8 +971,23 @@ def abort_run_impl(client, run_id: str) -> dict:
             "message": "Abort requested; the run stops shortly. Poll get_run to confirm."}
 
 
+_DOWNLOAD_FORMATS = ("csv", "xlsx", "json", "jsonl")
+
+
 @structured
-def get_results_url_impl(client, run_id: str) -> dict:
+def get_results_url_impl(client, run_id: str, format: str = "csv") -> dict:
     """A signed URL to download the full result set as a file — for when the
     caller wants everything, not the paged/capped rows get_results returns."""
-    return {"run_id": run_id, "download_url": client.get_run_download_url(run_id)}
+    fmt = (format or "csv").lower()
+    if fmt not in _DOWNLOAD_FORMATS:
+        return {"error_code": "invalid_request",
+                "message": f"format must be one of {', '.join(_DOWNLOAD_FORMATS)}"}
+    result = client.get_run_download_url(run_id, file_format=fmt)
+    if isinstance(result, dict) and result.get("status") == "processing":
+        # A non-default format/field selection on a large run is built in the
+        # background (see DownloadResultView) — not an error, just not ready.
+        return {"run_id": run_id, "format": fmt, "status": "processing",
+                "progress": result.get("progress"),
+                "message": ("The file is still being built in this format; call "
+                           "get_results_url again shortly.")}
+    return {"run_id": run_id, "format": fmt, "download_url": result}
