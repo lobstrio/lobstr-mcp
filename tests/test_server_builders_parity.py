@@ -39,4 +39,4 @@ def test_all_three_builders_register_the_same_tools(monkeypatch):
     assert PRIMITIVES <= dev
     assert _tools(authenticated) == dev
     assert _tools(oauth) == dev
-    assert len(dev) == 21  # +update_scraper
+    assert len(dev) == 22  # +update_scraper, +wait_for_run

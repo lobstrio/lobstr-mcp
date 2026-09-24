@@ -2,7 +2,8 @@ import json
 import httpx
 from lobstr_mcp.lobstr_client import LobstrClient
 from lobstr_mcp.safeguards import IdempotencyStore
-from lobstr_mcp.execution import run_scraper_impl, get_run_impl, get_results_impl
+from lobstr_mcp.execution import run_scraper_impl, get_run_impl, get_results_impl, \
+    wait_for_run_impl
 from lobstr_mcp.config import Settings
 
 SETTINGS = Settings(
@@ -287,6 +288,78 @@ def test_get_run_export_not_done_holds_off_is_done():
     out = get_run_impl(routed_client(routes), "run1")
     assert out["export_done"] is False
     assert out["is_done"] is False
+
+
+def test_wait_for_run_polls_until_done(monkeypatch):
+    import lobstr_mcp.execution as execution_mod
+    monkeypatch.setattr(execution_mod.time, "sleep", lambda s: None)
+    state = {"n": 0}
+
+    def stats_route(request, body):
+        state["n"] += 1
+        return httpx.Response(200, json={"id": "run1", "is_done": state["n"] >= 3})
+
+    def detail_route(request, body):
+        return httpx.Response(200, json={"id": "run1",
+                                         "status": "done" if state["n"] >= 3 else "running",
+                                         "credit_used": 5})
+
+    routes = {("GET", "/v1/runs/run1/stats"): stats_route,
+             ("GET", "/v1/runs/run1"): detail_route}
+    out = wait_for_run_impl(routed_client(routes), "run1", timeout_seconds=10)
+    assert out["is_done"] is True
+    assert out["status"] == "done"
+    assert state["n"] == 3  # polled more than once
+
+
+def test_wait_for_run_times_out_and_reports_still_running(monkeypatch):
+    import lobstr_mcp.execution as execution_mod
+    clock = {"t": 0.0}
+    monkeypatch.setattr(execution_mod.time, "monotonic", lambda: clock["t"])
+
+    def fake_sleep(s):
+        clock["t"] += s
+    monkeypatch.setattr(execution_mod.time, "sleep", fake_sleep)
+
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": False},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "running"},
+    }
+    out = wait_for_run_impl(routed_client(routes), "run1", timeout_seconds=5)
+    assert out["status"] == "still_running"
+    assert out["timed_out"] is True
+    assert out["run_id"] == "run1"
+
+
+def test_wait_for_run_caps_the_timeout_regardless_of_what_is_passed(monkeypatch):
+    import lobstr_mcp.execution as execution_mod
+    clock = {"t": 0.0}
+    monkeypatch.setattr(execution_mod.time, "monotonic", lambda: clock["t"])
+
+    def fake_sleep(s):
+        clock["t"] += s
+    monkeypatch.setattr(execution_mod.time, "sleep", fake_sleep)
+
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": False},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "running"},
+    }
+    wait_for_run_impl(routed_client(routes), "run1", timeout_seconds=999)
+    assert clock["t"] <= execution_mod._WAIT_MAX_TIMEOUT_SECONDS
+
+
+def test_wait_for_run_returns_an_error_immediately_without_polling(monkeypatch):
+    import lobstr_mcp.execution as execution_mod
+    monkeypatch.setattr(
+        execution_mod.time, "sleep",
+        lambda s: (_ for _ in ()).throw(AssertionError("must not sleep on an error")))
+
+    def stats_route(request, body):
+        return httpx.Response(404, json={"errors": {"message": "not found",
+                                                     "type": "HTTPNotFound", "code": 404}})
+    routes = {("GET", "/v1/runs/bad/stats"): stats_route}
+    out = wait_for_run_impl(routed_client(routes), "bad", timeout_seconds=5)
+    assert out["error_code"] == "not_found"
 
 
 def test_get_results_caps_and_selects_fields():

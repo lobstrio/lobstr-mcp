@@ -15,6 +15,8 @@ require `account:read` too.
 """
 from __future__ import annotations
 
+import time
+
 import httpx
 
 from lobstr_mcp.account_linking import (
@@ -807,6 +809,38 @@ def get_run_impl(client, run_id: str, full: bool = False) -> dict:
     # The raw stats blob duplicates the fields above; only ship it on request.
     if full:
         out["stats"] = stats
+    return out
+
+
+# Bounded well under a typical MCP client request timeout.
+_WAIT_MAX_TIMEOUT_SECONDS = 50.0
+_WAIT_POLL_INTERVAL_SECONDS = 2.0
+
+
+@structured
+def wait_for_run_impl(client, run_id: str, timeout_seconds: float = 30.0) -> dict:
+    """Poll get_run until `is_done` or `timeout_seconds` elapses, bounded at
+    `_WAIT_MAX_TIMEOUT_SECONDS` regardless of what's asked."""
+    timeout_seconds = max(1.0, min(timeout_seconds, _WAIT_MAX_TIMEOUT_SECONDS))
+    deadline = time.monotonic() + timeout_seconds
+
+    out = get_run_impl(client, run_id)
+    while not out.get("is_done") and "error_code" not in out:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(_WAIT_POLL_INTERVAL_SECONDS, remaining))
+        out = get_run_impl(client, run_id)
+
+    if "error_code" in out:
+        return out
+    if not out.get("is_done"):
+        out = dict(out)
+        out["status"] = "still_running"
+        out["timed_out"] = True
+        out["message"] = (f"Still running after {timeout_seconds:.0f}s — call "
+                          f"wait_for_run(run_id='{run_id}') again, or poll get_run "
+                          f"(run_id='{run_id}') directly.")
     return out
 
 

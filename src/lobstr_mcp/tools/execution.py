@@ -8,6 +8,7 @@ from lobstr_mcp.execution import (
     get_run_impl,
     list_runs_impl,
     run_scraper_impl,
+    wait_for_run_impl,
 )
 from lobstr_mcp.render import toon_result
 
@@ -140,9 +141,23 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
         "verifying_emails" (credits for it are still being billed);
         `run_status` always carries the API's own raw status regardless.
         `email_verification` (when present) gives its own progress/counts,
-        `export_done` says whether the downloadable file is ready."""
+        `export_done` says whether the downloadable file is ready.
+
+        wait_for_run(run_id=...) polls this for you."""
         authz(RUN_READ_SCOPES)
         out = get_run_impl(client_factory(), run_id, full=full)
+        return toon_result(out) if toon else out
+
+    @mcp.tool(annotations={"title": "Wait For Run", "readOnlyHint": True,
+                           "destructiveHint": False, "openWorldHint": True})
+    def wait_for_run(run_id: str, timeout_seconds: float = 30.0,
+                     toon: bool = False) -> dict:
+        """Poll get_run until it's fully done or `timeout_seconds` elapses
+        (capped at 50s regardless of what's passed). Returns get_run's shape;
+        if still going, `status` is "still_running" and `timed_out: true` —
+        call again to keep checking."""
+        authz(RUN_READ_SCOPES)
+        out = wait_for_run_impl(client_factory(), run_id, timeout_seconds=timeout_seconds)
         return toon_result(out) if toon else out
 
     @mcp.tool(annotations={"title": "Get Results", "readOnlyHint": True,
