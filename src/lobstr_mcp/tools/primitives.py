@@ -17,6 +17,7 @@ from lobstr_mcp.auth.scopes import EXECUTE_SCOPES, READ_SCOPES
 from lobstr_mcp.errors import LobstrAPIError, structured, to_error_dict
 from lobstr_mcp.lobstr_client import LobstrClient, resolve_crawler_id
 from lobstr_mcp.render import toon_result
+from lobstr_mcp.safeguards import validate_input
 from lobstr_mcp.schema_translator import translate_input_schema
 
 
@@ -96,14 +97,38 @@ def _remediation_tail(squid_id: str) -> str:
     )
 
 
-def _config_rejected(squid_id: str, crawler_id: str, upstream_message: str) -> dict:
-    """The config-apply call got a response and the API rejected it: nothing
-    was saved, full stop — this is the one path that can say so."""
+def _cleanup_squid(client: LobstrClient, squid_id: str) -> bool:
+    """Delete a squid whose config was just rejected; returns whether the
+    delete itself succeeded."""
+    try:
+        client.delete_squid(squid_id)
+        return True
+    except Exception:
+        return False
+
+
+def _config_rejected(client: LobstrClient, squid_id: str, crawler_id: str,
+                     upstream_message: str) -> dict:
+    """Config rejected: delete the now-useless squid rather than leaving an
+    orphan; if that cleanup fails too, name squid_id and both ways out."""
+    if _cleanup_squid(client, squid_id):
+        return {
+            "squid_id": squid_id, "scraper": crawler_id, "deleted": True,
+            "message": (
+                f"Configuration was rejected: {upstream_message} Squid {squid_id} (created "
+                "for this call) was deleted, so nothing is left behind — no concurrency slot "
+                "spent, nothing to clean up by hand. Fix the config (check "
+                "get_scraper_details' param_levels: function-level params go under a "
+                "\"functions\" key, never flat; task-level fields don't belong in config at "
+                "all, add them with add_tasks) and call create_squid again."
+            ),
+        }
     return {
-        "squid_id": squid_id, "scraper": crawler_id,
+        "squid_id": squid_id, "scraper": crawler_id, "deleted": False,
         "message": (
             f"Squid {squid_id} was created but its configuration was rejected, so it exists "
-            f"with no saved config and is not runnable yet: {upstream_message} "
+            f"with no saved config and is not runnable yet: {upstream_message} It could not "
+            "be deleted automatically either, so it is still there under that id. "
             + _remediation_tail(squid_id)
         ),
     }
@@ -142,11 +167,24 @@ def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = Non
 
     wire_names: dict = {}
     if cfg:
+        # Best-effort schema lookup; a failure just skips translation/validation.
         try:
             translated = _translated_schema(client, crawler_id)
-            wire_names = translated.get("wire_names") or {}
         except Exception:
-            pass
+            translated = None
+        if translated:
+            wire_names = translated.get("wire_names") or {}
+            # Validate before creating the squid, so an obviously-wrong
+            # config never gets the chance to leave an orphan.
+            flattened = {k: v for k, v in cfg.items() if k != "functions"}
+            functions = cfg.get("functions")
+            if isinstance(functions, dict):
+                flattened.update(functions)
+            errors = validate_input(flattened, translated["json_schema"], check_required=False)
+            if errors:
+                return {"error_code": "validation_error", "errors": errors,
+                        "scraper": crawler_id}
+
     squid = client.create_squid(crawler=crawler_id, name=name)
     squid_id = squid.get("id")
 
@@ -157,22 +195,13 @@ def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = Non
         body["concurrency"] = effective_concurrency
 
     if cfg or effective_concurrency is not None:
-        # The API only saves params when a recognized field (e.g. name) rides
-        # along, so always send a name with the params update.
         try:
             client.update_squid(squid_id, body)
         except LobstrAPIError as exc:
             base = to_error_dict(exc)
-            return base | _config_rejected(squid_id, crawler_id, base["message"])
+            return base | _config_rejected(client, squid_id, crawler_id, base["message"])
         except httpx.TransportError as exc:
-            # Nothing upstream of this client wraps a transport failure
-            # (timeout, connection reset, ...) into LobstrAPIError — only a
-            # non-2xx response goes through that path (lobstr_client.py's
-            # _as_lobstr_error only catches the SDK's APIError). The squid
-            # still exists either way, so this must not lose its id either.
-            # Caught specifically (not a bare `except Exception`): a bug in
-            # our own code here must still surface as a bug — with a
-            # traceback — not read to a model as a retryable API outage.
+            # Unknown whether it landed — do not delete a squid that might be fine.
             return _config_apply_unknown(squid_id, crawler_id, str(exc) or type(exc).__name__)
     return {"squid_id": squid_id, "scraper": crawler_id,
             "name": name or squid.get("name"), "concurrency": effective_concurrency,
@@ -252,13 +281,12 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
         run_scraper(squid_id=...). For a one-shot scrape, prefer run_scraper,
         which does all of this in a single call.
 
-        If `config` is rejected, the squid still exists — its id is in the
-        error — with no saved configuration and is not runnable. If saving it
-        fails outright instead (e.g. a timeout), the squid still exists but
-        whether the configuration saved is unknown, not rejected — the
-        request may have reached the server anyway. Either way the error
-        explains how to check and what to do next. Retrying create_squid with
-        the same name fails either way (the name is taken)."""
+        `config` is validated before the squid is created. If the API still
+        rejects it afterwards, the now-useless squid is deleted
+        (`deleted: true`); only if that cleanup itself fails does it still
+        exist, named in the error. A save that fails outright (e.g. a
+        timeout) leaves the squid, unknown whether it saved — not deleted.
+        Retrying with the same name fails while the squid still exists."""
         authz(EXECUTE_SCOPES)
         return create_squid_impl(client_factory(), scraper, name=name, config=config,
                                  concurrency=concurrency)

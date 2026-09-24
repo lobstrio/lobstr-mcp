@@ -220,6 +220,11 @@ class LobstrClient:
         with _as_lobstr_error(f"/squids/{squid_hash}"):
             return self._llhttp.post(f"/squids/{squid_hash}", json=settings)
 
+    def delete_squid(self, squid_hash: str) -> dict:
+        """Delete a squid outright (not reversible, unlike deactivate/empty)."""
+        with _as_lobstr_error(f"/squids/{squid_hash}"):
+            return self._sdk.squids.delete(squid_hash)
+
     def add_tasks(self, squid_hash: str, tasks: list[dict]) -> dict:
         with _as_lobstr_error("/tasks"):
             return self._llhttp.post("/tasks", json={"squid": squid_hash, "tasks": tasks})

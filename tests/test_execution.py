@@ -62,6 +62,39 @@ def test_confirm_executes_and_returns_run_id():
     assert out["status"] == "pending"
 
 
+def test_new_squid_config_rejected_deletes_the_orphan_and_names_it():
+    # POST /v1/squids/sq1 (the settings-save call) is rejected — before the
+    # fix this propagated through @structured's generic handler with no
+    # squid_id at all, leaving an orphan the caller couldn't even find.
+    routes = happy_routes()
+    routes[("POST", "/v1/squids/sq1")] = lambda request, body: httpx.Response(
+        400, json={"errors": {"message": "max_results is not a valid squid param",
+                              "type": "InvalidParam", "code": 400}})
+    routes[("DELETE", "/v1/squids/sq1")] = {}
+    out = run_scraper_impl(routed_client(routes), SETTINGS, IdempotencyStore(), "gm",
+                           {"query": "x"}, confirm=True)
+    assert out["squid_id"] == "sq1"
+    assert out["scraper"] == "gm"
+    assert out["deleted"] is True
+    assert "was deleted" in out["message"]
+    assert "no concurrency slot spent" in out["message"]
+
+
+def test_new_squid_config_rejected_and_cleanup_fails_keeps_orphan_named():
+    routes = happy_routes()
+    routes[("POST", "/v1/squids/sq1")] = lambda request, body: httpx.Response(
+        400, json={"errors": {"message": "max_results is not a valid squid param",
+                              "type": "InvalidParam", "code": 400}})
+    routes[("DELETE", "/v1/squids/sq1")] = lambda request, body: httpx.Response(
+        500, json={"errors": {"message": "server error", "type": "ServerError", "code": 500}})
+    out = run_scraper_impl(routed_client(routes), SETTINGS, IdempotencyStore(), "gm",
+                           {"query": "x"}, confirm=True)
+    assert out["squid_id"] == "sq1"  # still named, even though it's now an orphan
+    assert out["deleted"] is False
+    assert "could not be saved" in out["message"]
+    assert "get_my_scraper(squid_id='sq1')" in out["message"]
+
+
 def test_insufficient_credits_is_the_apis_refusal_not_a_local_guess():
     """The API decides affordability, not this client — a low
     local balance figure alone starts the run; only the API's own

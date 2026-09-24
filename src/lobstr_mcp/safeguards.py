@@ -19,23 +19,29 @@ _PY_TYPE_OK = {
 
 
 def validate_input(values: dict, json_schema: dict,
-                   input_modes: dict | None = None) -> list[str]:
+                   input_modes: dict | None = None,
+                   check_required: bool = True) -> list[str]:
     """Return a list of human-readable validation errors (empty if valid).
 
     `input_modes` (from the schema translator) expresses alternative input sets —
     e.g. Google Maps takes `url` OR `category`+`country`+`city`. When present, at
     least one complete alternative group must be supplied.
+
+    `check_required=False` skips the required/`input_modes` checks and only
+    type-checks fields present in `values` — for a squid re-run with
+    settings-only input, whose saved tasks already satisfy what's required.
     """
     errors: list[str] = []
     props = json_schema.get("properties", {})
-    for req in json_schema.get("required", []):
-        if req not in values:
-            errors.append(f"{req} is required")
-    if input_modes:
-        groups = input_modes.get("either") or []
-        if groups and not any(all(f in values for f in g) for g in groups):
-            opts = " OR ".join("(" + " + ".join(g) + ")" for g in groups)
-            errors.append(f"provide one of these input sets: {opts}")
+    if check_required:
+        for req in json_schema.get("required", []):
+            if req not in values:
+                errors.append(f"{req} is required")
+        if input_modes:
+            groups = input_modes.get("either") or []
+            if groups and not any(all(f in values for f in g) for g in groups):
+                opts = " OR ".join("(" + " + ".join(g) + ")" for g in groups)
+                errors.append(f"provide one of these input sets: {opts}")
     for key, val in values.items():
         spec = props.get(key)
         if not spec:

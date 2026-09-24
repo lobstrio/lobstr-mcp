@@ -78,6 +78,30 @@ def _detail(exc: Exception) -> str:
     return str(exc) or type(exc).__name__
 
 
+def _new_squid_write_failed(client, squid_id: str, scraper: str, base: dict) -> dict:
+    """Config/tasks write on a squid run_scraper just created was rejected —
+    delete the now-useless squid instead of leaving an orphan, and name
+    squid_id either way (mirrors create_squid_impl's own rejection handling)."""
+    deleted = False
+    try:
+        client.delete_squid(squid_id)
+        deleted = True
+    except Exception:
+        deleted = False
+    base = dict(base)
+    base["squid_id"] = squid_id
+    base["scraper"] = scraper
+    base["deleted"] = deleted
+    tail = ((f" Squid {squid_id} (created for this call) was deleted, so nothing is left "
+            "behind — no concurrency slot spent. Fix the input and call run_scraper again.")
+           if deleted else
+           (f" Squid {squid_id} was created but its configuration could not be saved, and "
+            "the automatic cleanup delete also failed — it still exists with no usable "
+            f"config. Check get_my_scraper(squid_id='{squid_id}') or delete it by hand."))
+    base["message"] = f"{base['message']}{tail}"
+    return base
+
+
 def _snapshot_tasks(client, squid_id: str) -> tuple[list[dict] | None, int]:
     """The task rows a squid has right now, as re-addable param dicts.
 
@@ -620,8 +644,20 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
         }
         if accounts_to_save:
             update_body["accounts"] = accounts_to_save
-        client.update_squid(squid_id, update_body)
-        client.add_tasks(squid_id, [task_params])
+        # A rejected write here used to lose squid_id entirely (generic
+        # handler); now delete the orphan on a confirmed rejection, or keep
+        # it and say so on a transport failure (unknown if it landed).
+        try:
+            client.update_squid(squid_id, update_body)
+            client.add_tasks(squid_id, [task_params])
+        except LobstrAPIError as exc:
+            return _new_squid_write_failed(client, squid_id, scraper, to_error_dict(exc))
+        except httpx.TransportError as exc:
+            failed = transport_error_dict(
+                exc, verify_with=f"get_my_scraper(squid_id='{squid_id}')")
+            failed["squid_id"] = squid_id
+            failed["scraper"] = scraper
+            return failed
         tasks_action, task_count = "created", 1
 
     # Config and rows are written; only POST /runs itself can still fail, and

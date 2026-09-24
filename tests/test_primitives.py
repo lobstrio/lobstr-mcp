@@ -88,10 +88,10 @@ def test_create_squid_bare_concurrency_arg_wins_over_config():
     assert seen_body["body"]["concurrency"] == 9
 
 
-def test_create_squid_config_rejected_returns_squid_id_not_orphaned():
+def test_create_squid_config_rejected_deletes_the_orphan_and_says_so():
     # POST /v1/squids/sq1 (the config-apply call) rejected — the create call
-    # above it already succeeded, so the squid exists; losing its id here
-    # would make it unreachable, and a same-name retry would then fail too.
+    # above it already succeeded. DELETE /v1/squids/sq1 falls through to the
+    # handler's default 200, so cleanup succeeds.
     def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "POST" and request.url.path == "/v1/squids/sq1":
             return httpx.Response(400, json={"errors": {
@@ -103,11 +103,43 @@ def test_create_squid_config_rejected_returns_squid_id_not_orphaned():
                      transport=httpx.MockTransport(handler))
     out = create_squid_impl(c, CID, name="My", config={"enrich_emails": True})
     msg = out["message"]
+    assert out["squid_id"] == "sq1"
+    assert out["scraper"] == CID
+    assert out["error_code"]
+    assert out["upstream_status"] == 400
+    assert out["deleted"] is True
+    assert "sq1" in msg
+    assert "was deleted" in msg
+    assert "no concurrency slot spent" in msg
+    # deleted, so nothing left to reuse via run_scraper or deactivate_scraper
+    assert "run_scraper" not in msg
+    assert "deactivate_scraper" not in msg
+    assert "call create_squid again" in msg
+
+
+def test_create_squid_config_rejected_and_cleanup_delete_also_fails_keeps_orphan():
+    # The rarer case: the cleanup delete itself also fails, so the squid
+    # really is left behind and the old orphan wording applies.
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/v1/squids/sq1":
+            return httpx.Response(400, json={"errors": {
+                "message": "functions.enrich_emails is not a valid squid param",
+                "type": "InvalidParam", "code": 400}})
+        if request.method == "DELETE" and request.url.path == "/v1/squids/sq1":
+            return httpx.Response(500, json={"errors": {"message": "server error",
+                                                         "type": "ServerError", "code": 500}})
+        return httpx.Response(200, json={"/v1/squids": SQUID}.get(request.url.path, SQUID))
+
+    c = LobstrClient("https://api.lobstr.io/v1", "t",
+                     transport=httpx.MockTransport(handler))
+    out = create_squid_impl(c, CID, name="My", config={"enrich_emails": True})
+    msg = out["message"]
     # not a bare opaque error: the caller can still find and fix the squid
     assert out["squid_id"] == "sq1"
     assert out["scraper"] == CID
     assert out["error_code"]
     assert out["upstream_status"] == 400  # a real rejection, unlike the transport case below
+    assert out["deleted"] is False
     assert "sq1" in msg
     assert "run_scraper" in msg  # points at the actual fix path
     # It really was rejected — nothing saved — so this path (unlike the
