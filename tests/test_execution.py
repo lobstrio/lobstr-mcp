@@ -520,6 +520,43 @@ def test_run_scraper_reruns_existing_squid_as_is():
     assert out["run_id"] == "run2" and out["reused_squid"] is True
 
 
+def test_run_scraper_reuse_with_settings_only_input_is_not_rejected():
+    # Bug: re-running a squid with ONLY squid-level settings (no task-level
+    # field) used to be rejected by validate_input demanding the crawler's
+    # task-level required field (`query`) even though nothing about the task
+    # rows changed — the docstring promises this merges into saved settings
+    # and the saved tasks run as-is.
+    routes = {
+        ("GET", "/v1/squids/sq1"): {"id": "sq1", "crawler": "gm", "name": "My GM"},
+        ("GET", "/v1/crawlers/gm"): CRAWLER_WITH_SQUID_PARAM,
+        ("GET", "/v1/user/balance"): {"available": 1000},
+        ("GET", "/v1/tasks"): {"total_pages": 1, "page": 1,
+                               "data": [{"id": "t1", "params": {"query": "dentists"}}]},
+        ("POST", "/v1/squids/sq1"): {},
+        ("POST", "/v1/runs"): {"id": "run2", "status": "pending"},
+        # no ("POST", "/v1/tasks"): settings-only input must not touch task rows
+    }
+    out = run_scraper_impl(routed_client(routes), SETTINGS, IdempotencyStore(),
+                           confirm=True, squid_id="sq1", input={"max_results": 20})
+    assert "error_code" not in out, out
+    assert out["run_id"] == "run2"
+    assert out["tasks_action"] == "unchanged"
+
+
+def test_run_scraper_reuse_with_task_input_still_requires_task_fields():
+    # The other side of the same fix: adding a NEW task-level input on a squid
+    # that has none yet still needs that field's own required companions.
+    routes = {
+        ("GET", "/v1/squids/sq1"): {"id": "sq1", "crawler": "gm", "name": "My GM"},
+        ("GET", "/v1/crawlers/gm"): CRAWLER_GM_GROUPED,
+        ("GET", "/v1/user/balance"): {"available": 1000},
+        ("GET", "/v1/tasks"): {"total_pages": 1, "page": 1, "data": []},
+    }
+    out = run_scraper_impl(routed_client(routes), SETTINGS, IdempotencyStore(),
+                           confirm=True, squid_id="sq1", input={"category": "cafe"})
+    assert out["error_code"] == "validation_error"
+
+
 def test_run_scraper_needs_scraper_or_squid_id():
     out = run_scraper_impl(routed_client({}), SETTINGS, IdempotencyStore())
     assert out["error_code"] == "invalid_request"

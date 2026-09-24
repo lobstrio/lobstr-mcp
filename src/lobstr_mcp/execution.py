@@ -457,10 +457,16 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
     # only; everything below sends the real name.
     wire_names = translated.get("wire_names") or {}
 
-    # Validate only when applying new input. Reusing a squid with no input
-    # re-runs it as-is, so its already-saved (valid) config stands.
+    # Settings-only input on a reused squid (no task-level field) merges into
+    # saved config and touches no task row, so task-level required fields
+    # don't apply — only when a task-level field is being added/replaced.
     if input or not reuse:
-        errors = validate_input(input, schema, input_modes=input_modes)
+        has_task_input = any(
+            levels.get(k) not in _SQUID_LEVELS and levels.get(k) != _FUNCTION_LEVEL
+            for k in input)
+        check_required = (not reuse) or has_task_input
+        errors = validate_input(input, schema, input_modes=input_modes,
+                                check_required=check_required)
         if errors:
             return {"error_code": "validation_error", "errors": errors}
 

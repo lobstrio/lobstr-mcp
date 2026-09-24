@@ -5,7 +5,12 @@ import httpx
 import pytest
 
 from lobstr_mcp.lobstr_client import LobstrClient
-from lobstr_mcp.tools.primitives import add_tasks_impl, create_squid_impl, estimate_run_impl
+from lobstr_mcp.tools.primitives import (
+    add_tasks_impl,
+    create_squid_impl,
+    estimate_run_impl,
+    update_scraper_impl,
+)
 
 
 def client_for(routes, seen=None):
@@ -296,6 +301,50 @@ def test_add_tasks_reports_added_and_duplicated():
 def test_add_tasks_rejects_empty():
     out = add_tasks_impl(client_for({}), "sq1", [])
     assert out["error_code"] == "invalid_request"
+
+
+def test_update_scraper_rejects_an_empty_call():
+    out = update_scraper_impl(client_for({}), "sq1")
+    assert out["error_code"] == "invalid_request"
+
+
+def test_update_scraper_sends_name_config_and_concurrency():
+    seen_body = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/v1/squids/sq1":
+            seen_body["body"] = json.loads(request.content)
+            return httpx.Response(200, json={"id": "sq1", "name": "New", "concurrency": 4})
+        return httpx.Response(200, json=SQUID)
+
+    c = LobstrClient("https://api.lobstr.io/v1", "t", transport=httpx.MockTransport(handler))
+    out = update_scraper_impl(c, "sq1", name="New", config={"max_results": 5}, concurrency=4)
+    assert out["squid_id"] == "sq1"
+    assert out["name"] == "New"
+    assert out["concurrency"] == 4
+    assert seen_body["body"] == {"name": "New", "params": {"max_results": 5}, "concurrency": 4}
+
+
+def test_update_scraper_params_only_still_sends_a_name_to_persist():
+    seen_body = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/v1/squids/sq1":
+            seen_body["body"] = json.loads(request.content)
+            return httpx.Response(200, json={})
+        return httpx.Response(200, json=SQUID)
+
+    c = LobstrClient("https://api.lobstr.io/v1", "t", transport=httpx.MockTransport(handler))
+    update_scraper_impl(c, "sq1", config={"max_results": 5})
+    assert seen_body["body"]["name"] == "N"  # SQUID's saved name, not omitted
+    assert seen_body["body"]["params"] == {"max_results": 5}
+
+
+def test_update_scraper_does_not_touch_tasks():
+    seen = []
+    c = client_for({"/v1/squids/sq1": SQUID}, seen)
+    update_scraper_impl(c, "sq1", name="New")
+    assert ("POST", "/v1/tasks") not in seen
 
 
 def test_estimate_run_surfaces_api_estimate():

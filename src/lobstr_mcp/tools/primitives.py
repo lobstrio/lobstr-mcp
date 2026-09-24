@@ -229,6 +229,40 @@ def add_tasks_impl(client: LobstrClient, squid_id: str, tasks: list[dict]) -> di
                        "run_scraper(squid_id=...)."}
 
 
+@structured(verify_with="get_my_scraper(squid_id=...)")
+def update_scraper_impl(client: LobstrClient, squid_id: str, name: str | None = None,
+                        config: dict | None = None,
+                        concurrency: int | None = None) -> dict:
+    """Change an existing squid's settings without running it or touching
+    its saved tasks. No orphan risk: the squid already exists."""
+    cfg = dict(config) if config else {}
+    cfg_concurrency = cfg.pop("concurrency", None)
+    effective_concurrency = concurrency if concurrency is not None else cfg_concurrency
+
+    if name is None and not cfg and effective_concurrency is None:
+        return {"error_code": "invalid_request",
+                "message": "provide at least one of name, config, concurrency"}
+
+    wire_names, squid = _squid_and_wire_names(client, squid_id)
+    body: dict = {}
+    if name is not None:
+        body["name"] = name
+    if cfg:
+        body["params"] = _apply_wire_names(cfg, wire_names)
+    if effective_concurrency is not None:
+        body["concurrency"] = effective_concurrency
+    if "params" in body and "name" not in body:
+        # A save only takes effect with a recognized field like name riding along.
+        body["name"] = squid.get("name") or squid.get("crawler") or squid_id
+
+    updated = client.update_squid(squid_id, body)
+    updated = updated if isinstance(updated, dict) else {}
+    return {"squid_id": squid_id,
+            "name": updated.get("name", body.get("name")),
+            "concurrency": updated.get("concurrency", effective_concurrency),
+            "message": "Scraper settings updated."}
+
+
 # What the API's estimate counts, and what it does not. Both are things a
 # model has to know to use the numbers, and neither is in the payload.
 _CREDITS_NOTE = (
@@ -301,6 +335,20 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
         running."""
         authz(EXECUTE_SCOPES)
         return add_tasks_impl(client_factory(), squid_id, tasks)
+
+    @mcp.tool(annotations={"title": "Update Scraper", "readOnlyHint": False,
+                           "destructiveHint": False, "idempotentHint": False,
+                           "openWorldHint": True})
+    def update_scraper(squid_id: str, name: str | None = None,
+                       config: dict | None = None,
+                       concurrency: int | None = None) -> dict:
+        """Change an existing squid's `name`, `config` (same shape/aliases as
+        create_squid's), and/or `concurrency` — WITHOUT running it or
+        touching saved tasks. Pass at least one. No orphan risk: the squid
+        already exists, so a rejected config is just a normal error."""
+        authz(EXECUTE_SCOPES)
+        return update_scraper_impl(client_factory(), squid_id, name=name, config=config,
+                                   concurrency=concurrency)
 
     @mcp.tool(annotations={"title": "Estimate Run", "readOnlyHint": True,
                            "destructiveHint": False, "openWorldHint": True})
