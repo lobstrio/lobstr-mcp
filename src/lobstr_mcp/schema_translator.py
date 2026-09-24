@@ -23,9 +23,11 @@ def _input_modes(items: list[dict]) -> dict | None:
 
     Some crawlers (e.g. Google Maps) split required inputs into groups — `url`
     in group "url", `category`/`country`/`city` in group "location" — where you
-    supply the fields of ONE group, not all. Ungrouped required fields (e.g.
-    `language`) are always required. Only kicks in when 2+ groups each carry a
-    required field; otherwise there are no alternatives to express.
+    supply the fields of ONE group, not all. Ungrouped required fields are
+    always required — unless they also carry a `default`, in which case, same
+    as the main schema's `required`, the default fills them when omitted and
+    they don't belong in `always` either. Only kicks in when 2+ groups each
+    carry a required field; otherwise there are no alternatives to express.
     """
     groups: dict[str, list[str]] = {}
     always: list[str] = []
@@ -33,6 +35,8 @@ def _input_modes(items: list[dict]) -> dict | None:
         if not it.get("required"):
             continue
         name, group = it["name"], it.get("group")
+        if not group and "default" in it:
+            continue
         if group:
             groups.setdefault(group, []).append(name)
         else:
