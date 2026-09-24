@@ -814,8 +814,23 @@ def abort_run_impl(client, run_id: str) -> dict:
             "message": "Abort requested; the run stops shortly. Poll get_run to confirm."}
 
 
+_DOWNLOAD_FORMATS = ("csv", "xlsx", "json", "jsonl")
+
+
 @structured
-def get_results_url_impl(client, run_id: str) -> dict:
+def get_results_url_impl(client, run_id: str, format: str = "csv") -> dict:
     """A signed URL to download the full result set as a file — for when the
     caller wants everything, not the paged/capped rows get_results returns."""
-    return {"run_id": run_id, "download_url": client.get_run_download_url(run_id)}
+    fmt = (format or "csv").lower()
+    if fmt not in _DOWNLOAD_FORMATS:
+        return {"error_code": "invalid_request",
+                "message": f"format must be one of {', '.join(_DOWNLOAD_FORMATS)}"}
+    result = client.get_run_download_url(run_id, file_format=fmt)
+    if isinstance(result, dict) and result.get("status") == "processing":
+        # A non-default format/field selection on a large run is built in the
+        # background (see DownloadResultView) — not an error, just not ready.
+        return {"run_id": run_id, "format": fmt, "status": "processing",
+                "progress": result.get("progress"),
+                "message": ("The file is still being built in this format; call "
+                           "get_results_url again shortly.")}
+    return {"run_id": run_id, "format": fmt, "download_url": result}

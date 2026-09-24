@@ -166,12 +166,15 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
 
     @mcp.tool(annotations={"title": "Get Results Download URL", "readOnlyHint": True,
                            "destructiveHint": False, "openWorldHint": True})
-    def get_results_url(run_id: str) -> dict:
+    def get_results_url(run_id: str, format: str = "csv") -> dict:
         """Get a signed URL to download a run's full result set as a file — use
         this instead of get_results when the caller wants the whole dataset
-        rather than paged rows."""
+        rather than paged rows. `format` is "csv" (default), "xlsx", "json" or
+        "jsonl". A format other than csv on a large run can take a moment to
+        build server-side; when it isn't ready yet this returns
+        `status: "processing"` instead of `download_url` — call again shortly."""
         authz(RESULTS_READ_SCOPES)
-        return get_results_url_impl(client_factory(), run_id)
+        return get_results_url_impl(client_factory(), run_id, format=format)
 
     @mcp.tool(annotations={"title": "Abort Run",
                            "readOnlyHint": False, "destructiveHint": False,

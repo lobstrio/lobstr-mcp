@@ -152,9 +152,16 @@ class LobstrClient:
         with _as_lobstr_error("/runs"):
             return [r.raw for r in self._sdk.runs.list(squid=squid_hash, limit=limit)]
 
-    def get_run_download_url(self, run_hash: str) -> str:
+    def get_run_download_url(self, run_hash: str, file_format: str | None = None):
+        """A signed download URL, or `{"status": "processing", ...}` when a
+        non-default format on a large run is still being built — not an
+        error, the caller should retry."""
+        params = {"file_format": file_format} if file_format else None
         with _as_lobstr_error(f"/runs/{run_hash}/download"):
-            return self._sdk.runs.download_url(run_hash)
+            data = self._llhttp.get(f"/runs/{run_hash}/download", params=params)
+        if isinstance(data, dict) and "s3" in data:
+            return data["s3"]
+        return data
 
     def abort_run(self, run_hash: str) -> dict:
         with _as_lobstr_error(f"/runs/{run_hash}/abort"):
