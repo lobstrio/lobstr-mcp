@@ -130,15 +130,18 @@ def _config_apply_unknown(squid_id: str, crawler_id: str, detail: str) -> dict:
 
 @structured(verify_with="list_my_scrapers(name=...), which lists the scraper if it was created")
 def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = None,
-                      config: dict | None = None) -> dict:
-    """Create a squid from a crawler (slug or id) without running it. `config`
-    sets squid-level params directly, and function-level toggles nested under
-    a "functions" key within it (see get_scraper_details' param_levels) —
-    saved so the squid is runnable once it has tasks. Task-level fields don't
-    belong here; add them with add_tasks."""
+                      config: dict | None = None,
+                      concurrency: int | None = None) -> dict:
+    """Create a squid from a crawler without running it. `concurrency` is a
+    squid-level column, not a crawler param — lifted out of `config` if
+    passed there and sent top-level either way."""
     crawler_id = resolve_crawler_id(client, scraper)
+    cfg = dict(config) if config else {}
+    cfg_concurrency = cfg.pop("concurrency", None)
+    effective_concurrency = concurrency if concurrency is not None else cfg_concurrency
+
     wire_names: dict = {}
-    if config:
+    if cfg:
         try:
             translated = _translated_schema(client, crawler_id)
             wire_names = translated.get("wire_names") or {}
@@ -146,14 +149,18 @@ def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = Non
             pass
     squid = client.create_squid(crawler=crawler_id, name=name)
     squid_id = squid.get("id")
-    if config:
+
+    body: dict = {"name": name or squid.get("name") or crawler_id}
+    if cfg:
+        body["params"] = _apply_wire_names(cfg, wire_names)
+    if effective_concurrency is not None:
+        body["concurrency"] = effective_concurrency
+
+    if cfg or effective_concurrency is not None:
         # The API only saves params when a recognized field (e.g. name) rides
         # along, so always send a name with the params update.
         try:
-            client.update_squid(squid_id, {
-                "name": name or squid.get("name") or crawler_id,
-                "params": _apply_wire_names(config, wire_names),
-            })
+            client.update_squid(squid_id, body)
         except LobstrAPIError as exc:
             base = to_error_dict(exc)
             return base | _config_rejected(squid_id, crawler_id, base["message"])
@@ -168,7 +175,7 @@ def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = Non
             # traceback — not read to a model as a retryable API outage.
             return _config_apply_unknown(squid_id, crawler_id, str(exc) or type(exc).__name__)
     return {"squid_id": squid_id, "scraper": crawler_id,
-            "name": name or squid.get("name"),
+            "name": name or squid.get("name"), "concurrency": effective_concurrency,
             "message": "Squid created. Add inputs with add_tasks, then run it with "
                        "run_scraper(squid_id=...). estimate_run gives the cost first."}
 
@@ -231,16 +238,19 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
                            "destructiveHint": False, "idempotentHint": False,
                            "openWorldHint": True})
     def create_squid(scraper: str, name: str | None = None,
-                     config: dict | None = None) -> dict:
+                     config: dict | None = None,
+                     concurrency: int | None = None) -> dict:
         """Create a new squid (a saved, configured scraper instance) from a
         crawler — WITHOUT running it. Optionally set a `name` and `config`:
         check get_scraper_details' param_levels first — `config` takes
         "squid"-level params directly (including any published alias, e.g.
         `squid_country`) and "function"-level ones nested under a "functions"
         key within it, but never "task"-level fields (those go through
-        add_tasks, not here). Then add inputs with add_tasks and run
-        it with run_scraper(squid_id=...). For a one-shot scrape, prefer
-        run_scraper, which does all of this in a single call.
+        add_tasks, not here). `concurrency` is a top-level field, not a
+        crawler param — pass it here or inside `config` (lifted out either
+        way). Then add inputs with add_tasks and run it with
+        run_scraper(squid_id=...). For a one-shot scrape, prefer run_scraper,
+        which does all of this in a single call.
 
         If `config` is rejected, the squid still exists — its id is in the
         error — with no saved configuration and is not runnable. If saving it
@@ -250,7 +260,8 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
         explains how to check and what to do next. Retrying create_squid with
         the same name fails either way (the name is taken)."""
         authz(EXECUTE_SCOPES)
-        return create_squid_impl(client_factory(), scraper, name=name, config=config)
+        return create_squid_impl(client_factory(), scraper, name=name, config=config,
+                                 concurrency=concurrency)
 
     @mcp.tool(annotations={"title": "Add Tasks", "readOnlyHint": False,
                            "destructiveHint": False, "idempotentHint": False,

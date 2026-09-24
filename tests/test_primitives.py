@@ -40,6 +40,54 @@ def test_create_squid_with_config_saves_params():
     assert ("POST", "/v1/squids/sq1") in seen  # squid-level params persisted
 
 
+def test_create_squid_sends_concurrency_top_level():
+    seen_body = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/v1/squids/sq1":
+            seen_body["body"] = json.loads(request.content)
+            return httpx.Response(201, json={})
+        return httpx.Response(200, json=SQUID)
+
+    c = LobstrClient("https://api.lobstr.io/v1", "t", transport=httpx.MockTransport(handler))
+    out = create_squid_impl(c, CID, name="My", concurrency=3)
+    assert out["squid_id"] == "sq1"
+    assert out["concurrency"] == 3
+    assert seen_body["body"]["concurrency"] == 3
+    assert "params" not in seen_body["body"]
+
+
+def test_create_squid_lifts_concurrency_out_of_config():
+    seen_body = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/v1/squids/sq1":
+            seen_body["body"] = json.loads(request.content)
+            return httpx.Response(201, json={})
+        return httpx.Response(200, json=SQUID)
+
+    c = LobstrClient("https://api.lobstr.io/v1", "t", transport=httpx.MockTransport(handler))
+    out = create_squid_impl(c, CID, name="My", config={"concurrency": 5, "max_results": 10})
+    assert out["concurrency"] == 5
+    assert seen_body["body"]["concurrency"] == 5
+    assert seen_body["body"]["params"] == {"max_results": 10}  # concurrency not duplicated here
+
+
+def test_create_squid_bare_concurrency_arg_wins_over_config():
+    seen_body = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/v1/squids/sq1":
+            seen_body["body"] = json.loads(request.content)
+            return httpx.Response(201, json={})
+        return httpx.Response(200, json=SQUID)
+
+    c = LobstrClient("https://api.lobstr.io/v1", "t", transport=httpx.MockTransport(handler))
+    out = create_squid_impl(c, CID, name="My", config={"concurrency": 5}, concurrency=9)
+    assert out["concurrency"] == 9
+    assert seen_body["body"]["concurrency"] == 9
+
+
 def test_create_squid_config_rejected_returns_squid_id_not_orphaned():
     # POST /v1/squids/sq1 (the config-apply call) rejected — the create call
     # above it already succeeded, so the squid exists; losing its id here
