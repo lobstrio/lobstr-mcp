@@ -35,6 +35,7 @@ from lobstr_mcp.safeguards import (
     compute_idempotency_key,
     estimate_cost,
     validate_input,
+    verification_cost_note,
 )
 from lobstr_mcp.schema_translator import translate_input_schema
 
@@ -44,9 +45,12 @@ _FUNCTION_LEVEL = "function"
 _RESULT_LIST_KEYS = ("data", "results", "records")
 
 
-def _estimate_dict(est: CostEstimate) -> dict:
-    return {"credits": est.credits, "basis": est.basis, "currency": est.currency,
-            "rate_per_row": est.rate}
+def _estimate_dict(est: CostEstimate, verification_note: str | None = None) -> dict:
+    out = {"credits": est.credits, "basis": est.basis, "currency": est.currency,
+           "rate_per_row": est.rate}
+    if verification_note:
+        out["verification_note"] = verification_note
+    return out
 
 
 def _redact_account_error(error: dict) -> dict:
@@ -568,6 +572,12 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
                         max_results_per_task=effective.get("max_results"),
                         run_result_cap=effective.get("max_unique_results_per_run"),
                         settings=effective)
+    # auto_verify_emails is a squid-level column, not in `params`/`effective`;
+    # read it from this call's input, else the reused squid's saved value.
+    effective_auto_verify = squid_params.get("auto_verify_emails")
+    if effective_auto_verify is None and reuse:
+        effective_auto_verify = existing_squid.get("auto_verify_emails")
+    verification_note = verification_cost_note(crawler, bool(effective_auto_verify))
     if not confirm and (est.credits is None or est.credits > settings.run_confirm_threshold):
         msg = ("Cost cannot be estimated before running; confirm to proceed."
                if est.credits is None else
@@ -579,7 +589,7 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
         elif rows_this_run is None:
             msg += (" How many input rows this scraper holds could not be read, so the "
                     "estimate covers one row and the real total may be a multiple of it.")
-        return {"needs_confirmation": True, "estimate": _estimate_dict(est),
+        return {"needs_confirmation": True, "estimate": _estimate_dict(est, verification_note),
                 "message": msg, "rows_this_run": rows_this_run,
                 "hint": "call run_scraper again with confirm=true to execute"}
 
@@ -692,7 +702,7 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
                  transport_error_dict(exc, verify_with="list_runs(squid_id=...)"))
         failed |= {"squid_id": squid_id, "scraper": scraper,
                   "tasks_action": tasks_action, "task_count": task_count,
-                  "estimate": _estimate_dict(est)}
+                  "estimate": _estimate_dict(est, verification_note)}
         if remaining is not None:
             failed["remaining"] = remaining
         if tasks_action == "replaced":
@@ -721,7 +731,7 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
     # bill.
     result = {"run_id": run_id, "squid_id": squid_id, "scraper": scraper,
               "reused_squid": reuse, "status": run.get("status"),
-              "estimate": _estimate_dict(est), "submitted_input": input,
+              "estimate": _estimate_dict(est, verification_note), "submitted_input": input,
               "account_attached": account_attached,
               "tasks_action": tasks_action, "task_count": task_count,
               "tasks_note": _tasks_note(tasks_action, task_count, replaced_count)}

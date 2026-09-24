@@ -208,6 +208,23 @@ DERIVED_IDEMPOTENCY_TTL = 120  # 2 minutes
 DEFAULT_IDEMPOTENCY_TTL = 24 * 3600  # 1 day, matches persistence.RedisIdempotencyStore
 
 
+def verification_cost_note(crawler: dict, auto_verify_emails: bool) -> str | None:
+    """None unless email verification is on; otherwise a note that a cost
+    estimate excludes it (billed separately after the scrape), sized from
+    credits_per_email when published."""
+    if not auto_verify_emails:
+        return None
+    rate = resolve_credit_rate(crawler.get("credits_per_email"))
+    if rate is not None:
+        return (f"auto_verify_emails is on for this run — the estimate does NOT include "
+               f"email verification, billed separately after the scrape at "
+               f"credits_per_email={rate} per email found; budget up to "
+               "credits_per_email x emails found on top of it.")
+    return ("auto_verify_emails is on for this run — the estimate does NOT include email "
+           "verification, billed separately after the scrape, and this crawler publishes "
+           "no credits_per_email to size it by; budget for it separately.")
+
+
 def compute_idempotency_key(user_scope: str, scraper: str, values: dict) -> str:
     """Scoped per user (opaque, see LobstrClient.user_scope) so two callers
     with the same scraper/input don't dedupe each other's runs."""

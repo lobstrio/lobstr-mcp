@@ -1,4 +1,5 @@
-"""Composable execution primitives: create_squid, add_tasks, estimate_run.
+"""Composable execution primitives: create_squid, add_tasks, update_scraper,
+estimate_run.
 
 `run_scraper` stays the one-call default (create → configure → add tasks → run in
 one shot). These primitives expose the same steps individually so an agent can
@@ -17,7 +18,7 @@ from lobstr_mcp.auth.scopes import EXECUTE_SCOPES, READ_SCOPES
 from lobstr_mcp.errors import LobstrAPIError, structured, to_error_dict
 from lobstr_mcp.lobstr_client import LobstrClient, resolve_crawler_id
 from lobstr_mcp.render import toon_result
-from lobstr_mcp.safeguards import validate_input
+from lobstr_mcp.safeguards import validate_input, verification_cost_note
 from lobstr_mcp.schema_translator import translate_input_schema
 
 
@@ -39,24 +40,6 @@ def _apply_wire_names(values: dict, wire_names: dict) -> dict:
     if isinstance(functions, dict):
         out["functions"] = {wire_names.get(k, k): v for k, v in functions.items()}
     return out
-
-
-def _squid_and_wire_names(client: LobstrClient, squid_id: str) -> tuple[dict, dict]:
-    """(wire_names, squid) for an existing squid; best-effort, skips
-    translation on failure rather than failing the caller's request."""
-    try:
-        squid = client.get_squid(squid_id)
-    except Exception:
-        return {}, {}
-    squid = squid if isinstance(squid, dict) else {}
-    crawler_id = squid.get("crawler")
-    if not crawler_id:
-        return {}, squid
-    try:
-        translated = _translated_schema(client, crawler_id)
-    except Exception:
-        return {}, squid
-    return translated.get("wire_names") or {}, squid
 
 
 def _remediation_tail(squid_id: str) -> str:
@@ -209,6 +192,24 @@ def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = Non
                        "run_scraper(squid_id=...). estimate_run gives the cost first."}
 
 
+def _squid_and_wire_names(client: LobstrClient, squid_id: str) -> tuple[dict, dict]:
+    """(wire_names, squid) for an existing squid; best-effort, skips
+    translation on failure rather than failing the caller's request."""
+    try:
+        squid = client.get_squid(squid_id)
+    except Exception:
+        return {}, {}
+    squid = squid if isinstance(squid, dict) else {}
+    crawler_id = squid.get("crawler")
+    if not crawler_id:
+        return {}, squid
+    try:
+        translated = _translated_schema(client, crawler_id)
+    except Exception:
+        return {}, squid
+    return translated.get("wire_names") or {}, squid
+
+
 @structured(verify_with="estimate_run(squid_id=...), whose `tasks.count` is how many input "
                         "rows the scraper holds now")
 def add_tasks_impl(client: LobstrClient, squid_id: str, tasks: list[dict]) -> dict:
@@ -218,8 +219,9 @@ def add_tasks_impl(client: LobstrClient, squid_id: str, tasks: list[dict]) -> di
         return {"error_code": "invalid_request",
                 "message": "provide at least one task row in `tasks`"}
     wire_names, _ = _squid_and_wire_names(client, squid_id)
-    tasks = [_apply_wire_names(t, wire_names) if isinstance(t, dict) else t for t in tasks]
-    result = client.add_tasks(squid_id, tasks)
+    translated_tasks = [_apply_wire_names(t, wire_names) if isinstance(t, dict) else t
+                        for t in tasks]
+    result = client.add_tasks(squid_id, translated_tasks)
     result = result if isinstance(result, dict) else {}
     added = result.get("tasks")
     added_count = len(added) if isinstance(added, list) else len(tasks)
@@ -266,13 +268,32 @@ def update_scraper_impl(client: LobstrClient, squid_id: str, name: str | None = 
 # What the API's estimate counts, and what it does not. Both are things a
 # model has to know to use the numbers, and neither is in the payload.
 _CREDITS_NOTE = (
-    "total_credits is authoritative; run_scraper's own pre-run estimate is an upper bound, "
-    "and neither counts result filters priced per row kept."
+    "total_credits is authoritative; run_scraper's own is an upper bound. Neither counts "
+    "result filters, or email verification (see verification_note)."
 )
 _TIME_NOTE = (
     "estimated_time is a floor, not an ETA — a filtered run takes longer than this "
     "suggests; poll get_run for real progress."
 )
+# auto_verify_emails is a squid-level column, not a crawler param, and the
+# API's estimate leaves its cost out entirely.
+def _verification_note(client: LobstrClient, squid_id: str) -> str | None:
+    """None unless the squid has email verification on."""
+    try:
+        squid = client.get_squid(squid_id)
+    except Exception:
+        return None
+    if not isinstance(squid, dict):
+        return None
+    crawler_id = squid.get("crawler")
+    crawler = {}
+    if crawler_id:
+        try:
+            crawler = client.get_crawler(crawler_id)
+        except Exception:
+            crawler = {}
+    return verification_cost_note(crawler if isinstance(crawler, dict) else {},
+                                  bool(squid.get("auto_verify_emails")))
 
 
 @structured
@@ -281,15 +302,19 @@ def estimate_run_impl(client: LobstrClient, squid_id: str) -> dict:
     tasks (credits, projected results, time)."""
     est = client.estimate_squid(squid_id)
     est = est if isinstance(est, dict) else {}
-    return {"squid_id": squid_id,
-            "total_credits": est.get("total_credits"),
-            "estimate_note": _CREDITS_NOTE,
-            "estimated_time": est.get("estimated_time"),
-            "estimated_time_note": _TIME_NOTE,
-            "max_results": est.get("max_results"),
-            "services": est.get("services"),
-            "tasks": est.get("tasks"),
-            "recommended_upgrade_plan": est.get("recommended_upgrade_plan")}
+    out = {"squid_id": squid_id,
+           "total_credits": est.get("total_credits"),
+           "estimate_note": _CREDITS_NOTE,
+           "estimated_time": est.get("estimated_time"),
+           "estimated_time_note": _TIME_NOTE,
+           "max_results": est.get("max_results"),
+           "services": est.get("services"),
+           "tasks": est.get("tasks"),
+           "recommended_upgrade_plan": est.get("recommended_upgrade_plan")}
+    verification_note = _verification_note(client, squid_id)
+    if verification_note:
+        out["verification_note"] = verification_note
+    return out
 
 
 def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
@@ -303,17 +328,14 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
     def create_squid(scraper: str, name: str | None = None,
                      config: dict | None = None,
                      concurrency: int | None = None) -> dict:
-        """Create a new squid (a saved, configured scraper instance) from a
-        crawler — WITHOUT running it. Optionally set a `name` and `config`:
-        check get_scraper_details' param_levels first — `config` takes
-        "squid"-level params directly (including any published alias, e.g.
-        `squid_country`) and "function"-level ones nested under a "functions"
-        key within it, but never "task"-level fields (those go through
-        add_tasks, not here). `concurrency` is a top-level field, not a
-        crawler param — pass it here or inside `config` (lifted out either
-        way). Then add inputs with add_tasks and run it with
-        run_scraper(squid_id=...). For a one-shot scrape, prefer run_scraper,
-        which does all of this in a single call.
+        """Create a new squid from a crawler — WITHOUT running it. `config`
+        takes "squid"-level params directly (including any published alias,
+        e.g. `squid_country`) and "function"-level ones nested under a
+        "functions" key; never "task"-level fields (use add_tasks).
+        `concurrency` is a top-level field, not a crawler param — pass it
+        here or inside `config` (lifted out either way). Add inputs with
+        add_tasks, run with run_scraper(squid_id=...), or change settings
+        later with update_scraper. For a one-shot scrape, prefer run_scraper.
 
         `config` is validated before the squid is created. If the API still
         rejects it afterwards, the now-useless squid is deleted
@@ -358,13 +380,19 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
         the API (more accurate than run_scraper's built-in upper-bound). The squid
         must have at least one task.
 
-        `total_credits` covers the per-row price plus each paid extra step that
-        is on; the per-row result *filters* are priced too and are in neither
-        this figure nor run_scraper's. `estimated_time` is a floor, not an ETA:
-        it assumes every row fetched is kept, so a filtered run routinely takes
-        several times longer without anything being wrong. The response repeats
-        both caveats in `estimate_note` and `estimated_time_note` — report a run
-        against them rather than calling a run late or failed on this number.
+        `total_credits` covers the per-row price plus each paid extra step
+        that is on; per-row result *filters* are priced too and are in
+        neither this figure nor run_scraper's — and neither is email
+        verification, billed separately after the scrape when
+        `auto_verify_emails` is on. When it is, `verification_note` sizes it
+        from the crawler's `credits_per_email`; add that to `total_credits`
+        yourself, it is not folded in.
+
+        `estimated_time` is a floor, not an ETA: it assumes every row fetched
+        is kept, so a filtered run routinely takes several times longer
+        without anything being wrong. The response repeats both caveats in
+        `estimate_note` and `estimated_time_note` — report a run against them
+        rather than calling a run late or failed on this number.
 
         Pass toon=true for compact TOON."""
         authz(READ_SCOPES)

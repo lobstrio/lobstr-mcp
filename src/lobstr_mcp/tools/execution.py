@@ -76,7 +76,11 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
         steps that are on, so a re-run over many saved rows asks for
         confirmation where a single-row run would not. It is an upper bound
         (it assumes the row cap is reached); `estimate_run(squid_id=...)` is
-        the API's own figure. Affordability is the API's call, not this tool's:
+        the API's own figure. Neither includes email verification, billed
+        separately after the scrape when `auto_verify_emails` is on — when it
+        is, `estimate.verification_note` sizes it from `credits_per_email`;
+        add that on top yourself, it's never folded into `estimate.credits`.
+        Affordability is the API's call, not this tool's:
         it refuses an ordinary account whose period spend has reached its
         allowance and lets a staff/admin account run regardless — a refusal
         comes back as `insufficient_credits` with nothing spent, config and
@@ -136,16 +140,15 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
         `credits_breakdown` (per-function credits/attempts; omitted on older
         runs).
 
-        `is_done` is true only once the run itself finished AND (it has no
-        email-verification step, or that step finished too) AND its export is
-        done — not merely once scraping stopped. While verification is still
-        running after the run itself is "done", `status` reads
-        "verifying_emails" (credits for it are still being billed);
-        `run_status` always carries the API's own raw status regardless.
-        `email_verification` (when present) gives its own progress/counts,
-        `export_done` says whether the downloadable file is ready.
-        `total_unique_results` sits next to `total_results`; get_results' own
-        total_results is the count to trust for fetchable rows.
+        `is_done` is true only once the run, any email verification, and its
+        export are all done — not merely once scraping stopped. While
+        verification is still running, `status` reads "verifying_emails"
+        (credits for it are still being billed); `run_status` always carries
+        the API's own raw status. `email_verification` (when present) gives
+        its own progress/counts, `export_done` says whether the downloadable
+        file is ready. `total_unique_results` sits next to `total_results`;
+        get_results' own total_results is the count to trust for fetchable
+        rows.
 
         wait_for_run(run_id=...) polls this for you."""
         authz(RUN_READ_SCOPES)
