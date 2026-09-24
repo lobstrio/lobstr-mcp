@@ -1,6 +1,6 @@
 [project]
 name = "lobstr-mcp"
-version = "0.5.0"
+version = "0.5.1"
 requires-python = ">=3.12"
 license = "Apache-2.0"
 authors = [{ name = "Lobstr.io" }]
