@@ -118,6 +118,20 @@ def test_details_no_account_needed_is_null():
     assert out["required_account_type"] is None
 
 
+def test_details_notes_the_zip_code_behavior_for_google_maps():
+    crawler = {**CRAWLER_GM, "slug": "google-maps-leads-scraper"}
+    client = client_for({"/v1/crawlers/gm": crawler, "/v1/crawlers/gm/params": {}})
+    out = get_scraper_details_impl(client, "gm")
+    assert "ZIP/postal code" in out["note"]
+    assert "city" in out["note"]
+
+
+def test_details_has_no_note_for_an_unrelated_crawler():
+    client = client_for({"/v1/crawlers/gm": CRAWLER_GM, "/v1/crawlers/gm/params": {}})
+    out = get_scraper_details_impl(client, "gm")
+    assert "note" not in out
+
+
 def test_details_surfaces_required_account_type():
     # The crawler endpoint carries the account type under "account"; dropping
     # it left a model to discover the requirement only from a failed run

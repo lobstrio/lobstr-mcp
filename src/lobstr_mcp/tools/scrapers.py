@@ -218,6 +218,11 @@ def _strip_examples(schema: dict) -> dict:
     return {**schema, "properties": trimmed}
 
 
+# Crawlers whose task-level `city` accepts a ZIP/postal code and returns
+# results from the surrounding area, not city limits.
+_ZIP_CODE_SEARCHES_NEARBY_SLUGS = {"google-maps-leads-scraper"}
+
+
 @structured
 def get_scraper_details_impl(client: LobstrClient, scraper: str, full: bool = False) -> dict:
     scraper = resolve_crawler_id(client, scraper)
@@ -280,6 +285,9 @@ def get_scraper_details_impl(client: LobstrClient, scraper: str, full: bool = Fa
     # Absent entirely for a crawler with no such collision.
     if translated.get("wire_names"):
         result["param_wire_names"] = translated["wire_names"]
+    if crawler.get("slug") in _ZIP_CODE_SEARCHES_NEARBY_SLUGS:
+        result["note"] = ("A ZIP/postal code in `city` returns nearby towns too, not just "
+                          "that one — filter on the `city` output field for city limits only.")
     return result
 
 
@@ -435,7 +443,10 @@ def register_scraper_tools(mcp, client_factory, authorizer=None) -> None:
         `required_account_type`
         is null when no platform account is needed, else the account type a
         squid built from this crawler must have attached (via attach_account or
-        run_scraper's account_id) before a run can succeed. Pass full=true to
+        run_scraper's account_id) before a run can succeed. `note`, when
+        present, is a crawler-specific heads-up (e.g. Google Maps: a
+        ZIP/postal code in `city` returns nearby towns too — filter on the
+        `city` output field for city limits only). Pass full=true to
         also include per-input examples."""
         authz(READ_SCOPES)
         return get_scraper_details_impl(client_factory(), scraper, full=full)
