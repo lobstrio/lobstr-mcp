@@ -107,9 +107,10 @@ def test_remaining_is_todays_headroom_on_a_daily_account():
     assert "budget a run against" in out["credits_note"]
 
 
-def test_remaining_never_goes_negative_and_is_null_when_a_figure_is_missing():
+def test_remaining_is_reported_negative_not_clamped_to_zero():
+    # An overspent period is real; clamping to 0 hid that from the model.
     spent = {**DAILY_BALANCE, "available": 10, "consumed": 40}
-    assert check_credits_impl(client_for({"/v1/user/balance": spent}))["remaining"] == 0
+    assert check_credits_impl(client_for({"/v1/user/balance": spent}))["remaining"] == -30
     missing = {k: v for k, v in DAILY_BALANCE.items() if k != "consumed"}
     assert check_credits_impl(
         client_for({"/v1/user/balance": missing}))["remaining"] is None
