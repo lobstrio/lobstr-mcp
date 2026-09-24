@@ -24,6 +24,26 @@ def test_maps_types_and_required():
     assert schema["required"] == ["url"]
 
 
+def test_required_field_with_a_default_is_not_required():
+    # A field the crawler marks required AND gives a default for isn't
+    # actually mandatory: the default fills it when omitted. Google Maps'
+    # `language` is exactly this shape — required=True, default="en" — and
+    # was listed in the JSON schema's `required`, which told a model to
+    # always pass it even though the crawler runs fine without it.
+    crawler = {"input": [
+        {"name": "url", "type": "string", "level": "task", "required": True},
+        {"name": "language", "type": "string", "level": "squid",
+         "required": True, "default": "en"},
+    ]}
+    out = translate_input_schema(crawler)
+    schema = out["json_schema"]
+    assert "language" not in schema["required"]
+    assert schema["required"] == ["url"]
+    # still published, with its default, so a model reading the schema can
+    # see and override it
+    assert schema["properties"]["language"]["default"] == "en"
+
+
 GM_GROUPED = {"input": [
     {"name": "url", "type": "string", "level": "task", "required": True, "group": "url"},
     {"name": "category", "type": "string", "level": "task", "required": True, "group": "location"},

@@ -281,7 +281,9 @@ def translate_input_schema(crawler: dict, params: dict | None = None) -> dict:
 
     for name, item in seen.items():
         properties[name] = _property_from_item(item)
-        if item.get("required"):
+        # A default fills a "required" field when omitted, so it isn't
+        # actually mandatory input.
+        if item.get("required") and "default" not in item:
             required.append(name)
         if name in shadowed:
             # /params lists this name in two sections at once, so it cannot say
