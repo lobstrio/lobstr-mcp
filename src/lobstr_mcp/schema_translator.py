@@ -251,6 +251,9 @@ def translate_input_schema(crawler: dict, params: dict | None = None) -> dict:
     required: list[str] = []
     levels: dict[str, str] = {}
     wire_names: dict[str, str] = {}
+    # required fields with a default: optional for the model, but the API
+    # won't apply the default, so callers send it
+    defaults_to_fill: dict = {}
 
     # A crawler's input[] can list the same name twice at different levels —
     # the live Google Maps scraper has a required task-level `country` and an
@@ -285,10 +288,12 @@ def translate_input_schema(crawler: dict, params: dict | None = None) -> dict:
 
     for name, item in seen.items():
         properties[name] = _property_from_item(item)
-        # A default fills a "required" field when omitted, so it isn't
-        # actually mandatory input.
-        if item.get("required") and "default" not in item:
-            required.append(name)
+        # grouped (input_modes) fields keep their group semantics
+        if item.get("required"):
+            if "default" in item and not item.get("group"):
+                defaults_to_fill[name] = item["default"]
+            else:
+                required.append(name)
         if name in shadowed:
             # /params lists this name in two sections at once, so it cannot say
             # where THIS entry goes; the tie-break above already decided, and
@@ -364,4 +369,6 @@ def translate_input_schema(crawler: dict, params: dict | None = None) -> dict:
     # `.get("wire_names") or {}`.
     if wire_names:
         out["wire_names"] = wire_names
+    if defaults_to_fill:
+        out["defaults_to_fill"] = defaults_to_fill
     return out

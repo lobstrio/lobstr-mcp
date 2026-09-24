@@ -167,6 +167,10 @@ def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = Non
             if errors:
                 return {"error_code": "validation_error", "errors": errors,
                         "scraper": crawler_id}
+            levels = translated.get("levels") or {}
+            for k, v in (translated.get("defaults_to_fill") or {}).items():
+                target = cfg.setdefault("functions", {}) if levels.get(k) == "function" else cfg
+                target.setdefault(k, v)
 
     squid = client.create_squid(crawler=crawler_id, name=name)
     squid_id = squid.get("id")

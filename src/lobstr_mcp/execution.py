@@ -476,6 +476,9 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
                                 check_required=check_required)
         if errors:
             return {"error_code": "validation_error", "errors": errors}
+    # The API doesn't apply a declared default itself; send it for a new squid.
+    if not reuse:
+        input = {**(translated.get("defaults_to_fill") or {}), **input}
 
     # Scoped per user so different callers never dedupe each other. An
     # explicit key is the caller's own retry token (normal TTL); a derived

@@ -63,6 +63,15 @@ def test_grouped_inputs_become_alternative_modes():
     assert m["always"] == ["language"]
 
 
+def test_required_field_with_a_default_is_listed_to_fill():
+    crawler = {"input": [
+        {"name": "url", "type": "string", "level": "task", "required": True},
+        {"name": "language", "type": "string", "level": "squid",
+         "required": True, "default": "en"},
+    ]}
+    assert translate_input_schema(crawler)["defaults_to_fill"] == {"language": "en"}
+
+
 def test_grouped_inputs_ungrouped_required_field_with_default_is_not_always_required():
     # Same shape as GM_GROUPED (the live Google Maps crawler), but `language`
     # also has a default — the real shape (required=True, default="English

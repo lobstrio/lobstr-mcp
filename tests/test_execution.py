@@ -469,6 +469,18 @@ def test_squid_level_inputs_are_nested_under_params():
     assert body.get("name"), "a name is required for the save to take effect"
 
 
+def test_omitted_required_default_is_sent_for_a_new_squid():
+    crawler = {**CRAWLER_WITH_SQUID_PARAM, "input": [
+        *CRAWLER_WITH_SQUID_PARAM["input"],
+        {"name": "language", "type": "string", "level": "squid",
+         "required": True, "default": "en"}]}
+    routes, seen = _capture_routes(crawler=crawler)
+    out = run_scraper_impl(routed_client(routes), SETTINGS, IdempotencyStore(), "gm",
+                           {"query": "x"}, confirm=True)
+    assert out.get("run_id") == "run1", out
+    assert seen["settings"][0]["params"]["language"] == "en"
+
+
 def test_upstream_failure_returns_the_structured_error_contract():
     routes, _ = _capture_routes()
     routes[("POST", "/v1/runs")] = lambda request, body: httpx.Response(
