@@ -722,6 +722,11 @@ def _strip_empty(row: dict) -> dict:
             if v is not None and v != "" and v != [] and v != {}}
 
 
+_DEFAULT_PAGE_SIZE = 10
+_FULL_DEFAULT_PAGE_SIZE = 25
+_MAX_PAGE_SIZE = 100
+
+
 @structured
 def get_results_impl(client, *, run_id: str | None = None, squid_id: str | None = None,
                      page: int = 1, page_size: int | None = None,
@@ -731,10 +736,17 @@ def get_results_impl(client, *, run_id: str | None = None, squid_id: str | None 
         return {"error_code": "invalid_request",
                 "message": "provide run_id or squid_id (exactly one)"}
 
-    if max_rows is None:
-        max_rows = 25 if full else 10
+    # page_size is what's sent to the API and what total_pages/next describe;
+    # max_rows follows it (used to be fixed at 10/25 regardless of page_size).
+    effective_page_size = page_size if page_size else (
+        _FULL_DEFAULT_PAGE_SIZE if full else _DEFAULT_PAGE_SIZE)
+    effective_page_size = max(1, min(effective_page_size, _MAX_PAGE_SIZE))
+    max_rows = effective_page_size if max_rows is None else min(max_rows, effective_page_size)
 
-    payload = client.get_results(run=run_id, squid=squid_id, page=page, page_size=page_size)
+    # Free-plan accounts are capped at 30 results (API's ExportLimitReached);
+    # that propagates as a normal structured error, not caught here.
+    payload = client.get_results(run=run_id, squid=squid_id, page=page,
+                                 page_size=effective_page_size)
 
     records: list = []
     for k in _RESULT_LIST_KEYS:
@@ -753,6 +765,7 @@ def get_results_impl(client, *, run_id: str | None = None, squid_id: str | None 
         capped = [_strip_empty(r) if isinstance(r, dict) else r for r in capped]
     return {"total_results": payload.get("total_results"),
             "page": payload.get("page", page),
+            "page_size": effective_page_size,
             "total_pages": payload.get("total_pages"),
             "returned": len(capped),
             "available_fields": available_fields,

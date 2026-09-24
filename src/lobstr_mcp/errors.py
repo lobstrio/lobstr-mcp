@@ -54,6 +54,11 @@ _TYPE_CODES: dict[str, tuple[str, str]] = {
         "scraper you're not using (deactivate_scraper) — that keeps its config "
         "and results, unlike deleting — then retry.",
     ),
+    "ExportLimitReached": (
+        "export_limit_reached",
+        "Free-plan accounts can only read the first 30 results of a run. "
+        "Upgrading the plan is the only way past this.",
+    ),
 }
 
 _STATUS_CODES: dict[int, str] = {

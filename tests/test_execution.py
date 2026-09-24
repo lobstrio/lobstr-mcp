@@ -126,6 +126,20 @@ def test_get_results_caps_and_selects_fields():
     assert out["total_results"] == 5
 
 
+def test_get_results_surfaces_free_plan_export_limit_cleanly():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(400, json={"errors": {
+            "message": "You have reached the free plan limit of 30 results. "
+                       "Upgrade to a premium plan to access more results.",
+            "type": "ExportLimitReached", "code": 400}})
+    client = LobstrClient("https://api.lobstr.io/v1", "t",
+                          transport=httpx.MockTransport(handler))
+    out = get_results_impl(client, run_id="run1", page=4)
+    assert out["error_code"] == "export_limit_reached"
+    assert out["upstream_status"] == 400
+    assert "30 results" in out["message"]
+
+
 def test_get_results_requires_run_or_squid():
     client = routed_client({})
     out = get_results_impl(client)
@@ -323,6 +337,56 @@ def test_get_results_default_cap_is_ten_full_is_twentyfive():
     rows = [{"title": f"t{i}"} for i in range(30)]
     assert get_results_impl(_results_client(rows), run_id="run1")["returned"] == 10
     assert get_results_impl(_results_client(rows), run_id="run1", full=True)["returned"] == 25
+
+
+def _paged_api_client(all_rows, seen_page_sizes=None):
+    """A mock /v1/results that actually respects page_size (unlike
+    _results_client, which always answers with every row regardless of what
+    was asked for) — the shape needed to catch get_results_impl truncating a
+    page the caller asked to be bigger."""
+    def handler(request: httpx.Request) -> httpx.Response:
+        page_size = int(request.url.params.get("page_size", 10))
+        page = int(request.url.params.get("page", 1))
+        if seen_page_sizes is not None:
+            seen_page_sizes.append(page_size)
+        start = (page - 1) * page_size
+        page_rows = all_rows[start:start + page_size]
+        total_pages = max(1, -(-len(all_rows) // page_size))
+        return httpx.Response(200, json={"total_results": len(all_rows), "page": page,
+                                         "total_pages": total_pages, "data": page_rows})
+    return LobstrClient("https://api.lobstr.io/v1", "t",
+                        transport=httpx.MockTransport(handler))
+
+
+def test_get_results_page_size_is_honoured_not_capped_at_ten():
+    # Bug #12: a page_size of 50 used to still only return 10 rows (max_rows
+    # was fixed regardless of page_size), and the API's own page_size (sent as
+    # None) defaulted server-side to 10 while total_pages here still reported
+    # whatever the untouched page_size implied — the two never matched.
+    rows = [{"title": f"t{i}"} for i in range(50)]
+    seen = []
+    out = get_results_impl(_paged_api_client(rows, seen), run_id="run1", page_size=50)
+    assert seen == [50]
+    assert out["returned"] == 50
+    assert out["page_size"] == 50
+    assert out["total_pages"] == 1
+
+
+def test_get_results_page_size_defaults_match_what_is_sent_to_the_api():
+    rows = [{"title": f"t{i}"} for i in range(25)]
+    seen = []
+    out = get_results_impl(_paged_api_client(rows, seen), run_id="run1")
+    assert seen == [10]
+    assert out["returned"] == 10
+    assert out["total_pages"] == 3  # ceil(25/10), consistent with page_size actually used
+
+
+def test_get_results_page_size_is_capped_at_a_sane_max():
+    rows = [{"title": f"t{i}"} for i in range(500)]
+    seen = []
+    out = get_results_impl(_paged_api_client(rows, seen), run_id="run1", page_size=10_000)
+    assert seen == [100]
+    assert out["page_size"] == 100
 
 
 def test_run_scraper_accepts_a_slug():

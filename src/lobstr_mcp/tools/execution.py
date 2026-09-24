@@ -137,11 +137,18 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
                     fields: list[str] | None = None, full: bool = False,
                     toon: bool = False) -> dict:
         """Retrieve one page of results for a run or squid. Returns JSON; pass
-        toon=true for compact TOON (fewer tokens). By default empty fields are
-        dropped and rows are capped for brevity; the response lists
+        toon=true for compact TOON (fewer tokens). `page_size` (default 10, 25
+        when full=true, capped at 100) is the number of rows fetched AND
+        returned — `returned`/`total_pages`/`next` all describe that same
+        page_size, so raising it is how you get more rows per call, not
+        `page`. By default empty fields are dropped; the response lists
         `available_fields` you can request via `fields`. Pass full=true to keep
-        every field (including empty ones) and more rows. Provide exactly one of
-        run_id or squid_id."""
+        every field (including empty ones) and a bigger default page. Provide
+        exactly one of run_id or squid_id.
+
+        Free-plan accounts are capped at the first 30 results by the API; past
+        that this returns `export_limit_reached` rather than more rows —
+        upgrading the plan is the only fix, not a different page_size."""
         authz(RESULTS_READ_SCOPES)
         out = get_results_impl(client_factory(), run_id=run_id, squid_id=squid_id,
                                page=page, page_size=page_size, fields=fields, full=full)
