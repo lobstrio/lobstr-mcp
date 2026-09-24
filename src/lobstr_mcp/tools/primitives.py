@@ -5,8 +5,9 @@ one shot). These primitives expose the same steps individually so an agent can
 build or reuse a squid incrementally — create it, add tasks across several calls,
 get an authoritative cost estimate, then run it via run_scraper(squid_id=...).
 
-Thin wrappers over the client adapter: no schema translation here — task rows are
-passed straight to the API (use get_scraper_details for a crawler's input shape).
+`config`/`tasks` values go through the same alias translation as run_scraper's
+`input` (see schema_translator.translate_input_schema), so a published alias
+(e.g. `squid_country`) works here too, not just the API's own name.
 """
 from __future__ import annotations
 
@@ -16,6 +17,45 @@ from lobstr_mcp.auth.scopes import EXECUTE_SCOPES, READ_SCOPES
 from lobstr_mcp.errors import LobstrAPIError, structured, to_error_dict
 from lobstr_mcp.lobstr_client import LobstrClient, resolve_crawler_id
 from lobstr_mcp.render import toon_result
+from lobstr_mcp.schema_translator import translate_input_schema
+
+
+def _translated_schema(client: LobstrClient, crawler_id: str) -> dict:
+    """Crawler schema (properties/levels/wire_names); tolerates /params
+    being unavailable."""
+    crawler = client.get_crawler(crawler_id)
+    try:
+        crawler_params = client.get_crawler_params(crawler_id)
+    except Exception:
+        crawler_params = None
+    return translate_input_schema(crawler, params=crawler_params)
+
+
+def _apply_wire_names(values: dict, wire_names: dict) -> dict:
+    """Map each alias key to the API's real name; also inside "functions"."""
+    out = {wire_names.get(k, k): v for k, v in values.items() if k != "functions"}
+    functions = values.get("functions")
+    if isinstance(functions, dict):
+        out["functions"] = {wire_names.get(k, k): v for k, v in functions.items()}
+    return out
+
+
+def _squid_and_wire_names(client: LobstrClient, squid_id: str) -> tuple[dict, dict]:
+    """(wire_names, squid) for an existing squid; best-effort, skips
+    translation on failure rather than failing the caller's request."""
+    try:
+        squid = client.get_squid(squid_id)
+    except Exception:
+        return {}, {}
+    squid = squid if isinstance(squid, dict) else {}
+    crawler_id = squid.get("crawler")
+    if not crawler_id:
+        return {}, squid
+    try:
+        translated = _translated_schema(client, crawler_id)
+    except Exception:
+        return {}, squid
+    return translated.get("wire_names") or {}, squid
 
 
 def _remediation_tail(squid_id: str) -> str:
@@ -97,6 +137,13 @@ def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = Non
     saved so the squid is runnable once it has tasks. Task-level fields don't
     belong here; add them with add_tasks."""
     crawler_id = resolve_crawler_id(client, scraper)
+    wire_names: dict = {}
+    if config:
+        try:
+            translated = _translated_schema(client, crawler_id)
+            wire_names = translated.get("wire_names") or {}
+        except Exception:
+            pass
     squid = client.create_squid(crawler=crawler_id, name=name)
     squid_id = squid.get("id")
     if config:
@@ -105,7 +152,7 @@ def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = Non
         try:
             client.update_squid(squid_id, {
                 "name": name or squid.get("name") or crawler_id,
-                "params": config,
+                "params": _apply_wire_names(config, wire_names),
             })
         except LobstrAPIError as exc:
             base = to_error_dict(exc)
@@ -134,6 +181,8 @@ def add_tasks_impl(client: LobstrClient, squid_id: str, tasks: list[dict]) -> di
     if not tasks:
         return {"error_code": "invalid_request",
                 "message": "provide at least one task row in `tasks`"}
+    wire_names, _ = _squid_and_wire_names(client, squid_id)
+    tasks = [_apply_wire_names(t, wire_names) if isinstance(t, dict) else t for t in tasks]
     result = client.add_tasks(squid_id, tasks)
     result = result if isinstance(result, dict) else {}
     added = result.get("tasks")
@@ -186,9 +235,10 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
         """Create a new squid (a saved, configured scraper instance) from a
         crawler — WITHOUT running it. Optionally set a `name` and `config`:
         check get_scraper_details' param_levels first — `config` takes
-        "squid"-level params directly and "function"-level ones nested under
-        a "functions" key within it, but never "task"-level fields (those go
-        through add_tasks, not here). Then add inputs with add_tasks and run
+        "squid"-level params directly (including any published alias, e.g.
+        `squid_country`) and "function"-level ones nested under a "functions"
+        key within it, but never "task"-level fields (those go through
+        add_tasks, not here). Then add inputs with add_tasks and run
         it with run_scraper(squid_id=...). For a one-shot scrape, prefer
         run_scraper, which does all of this in a single call.
 
@@ -207,9 +257,9 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
                            "openWorldHint": True})
     def add_tasks(squid_id: str, tasks: list[dict]) -> dict:
         """Add task rows (inputs) to an existing squid. `tasks` is a list of
-        dicts, each carrying the crawler's task-level inputs (e.g.
-        {"url": "..."}); call get_scraper_details for a crawler's input schema.
-        Can be called repeatedly to build up a batch before running."""
+        dicts of the crawler's task-level inputs (e.g. {"url": "..."}),
+        including any published alias. Can be called repeatedly before
+        running."""
         authz(EXECUTE_SCOPES)
         return add_tasks_impl(client_factory(), squid_id, tasks)
 

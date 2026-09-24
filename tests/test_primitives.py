@@ -1,4 +1,6 @@
 """Coverage for the composable primitives: create_squid, add_tasks, estimate_run."""
+import json
+
 import httpx
 import pytest
 
@@ -145,6 +147,62 @@ def test_create_squid_config_apply_bug_is_not_relabeled_as_upstream_outage():
     c = BrokenClient("https://api.lobstr.io/v1", "t")
     with pytest.raises(ValueError, match="boom"):
         create_squid_impl(c, CID, name="My", config={"max_results": 50})
+
+
+# A crawler that declares "country" at two levels: task wins the plain name
+# (required tie-break), the squid-level one is published as "squid_country".
+ALIAS_CRAWLER = {"id": CID, "name": "GM", "result": ["title"], "input": [
+    {"name": "country", "type": "string", "level": "task", "required": True},
+    {"name": "country", "type": "string", "level": "squid", "required": False},
+]}
+
+
+def test_create_squid_translates_a_published_alias_in_config():
+    seen_body = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/v1/squids/sq1":
+            seen_body["params"] = json.loads(request.content)["params"]
+            return httpx.Response(201, json={})
+        if request.url.path == f"/v1/crawlers/{CID}":
+            return httpx.Response(200, json=ALIAS_CRAWLER)
+        if request.url.path == f"/v1/crawlers/{CID}/params":
+            return httpx.Response(200, json={})
+        return httpx.Response(200, json=SQUID)
+
+    c = LobstrClient("https://api.lobstr.io/v1", "t", transport=httpx.MockTransport(handler))
+    out = create_squid_impl(c, CID, name="My", config={"squid_country": "FR"})
+    assert out["squid_id"] == "sq1"
+    assert seen_body["params"] == {"country": "FR"}  # sent under the real API name
+
+
+# Same idea, tie broken the other way: squid-level wins the plain name
+# (required), task-level is shadowed as "task_country".
+ALIAS_CRAWLER_TASK_SHADOWED = {"id": CID, "name": "GM", "result": ["title"], "input": [
+    {"name": "country", "type": "string", "level": "squid", "required": True},
+    {"name": "country", "type": "string", "level": "task", "required": False},
+]}
+
+
+def test_add_tasks_translates_a_published_alias_in_task_rows():
+    seen_body = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "POST" and request.url.path == "/v1/tasks":
+            seen_body["tasks"] = json.loads(request.content)["tasks"]
+            return httpx.Response(200, json={"tasks": [{"id": "t1"}], "duplicated_count": 0})
+        if request.url.path == "/v1/squids/sq1":
+            return httpx.Response(200, json={"id": "sq1", "crawler": CID})
+        if request.url.path == f"/v1/crawlers/{CID}":
+            return httpx.Response(200, json=ALIAS_CRAWLER_TASK_SHADOWED)
+        if request.url.path == f"/v1/crawlers/{CID}/params":
+            return httpx.Response(200, json={})
+        return httpx.Response(200, json={})
+
+    c = LobstrClient("https://api.lobstr.io/v1", "t", transport=httpx.MockTransport(handler))
+    out = add_tasks_impl(c, "sq1", [{"task_country": "FR"}])
+    assert out["added"] == 1
+    assert seen_body["tasks"] == [{"country": "FR"}]  # sent under the real API name
 
 
 def test_add_tasks_reports_added_and_duplicated():
