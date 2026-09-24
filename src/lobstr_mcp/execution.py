@@ -762,9 +762,13 @@ def _verification_out(detail: dict) -> dict | None:
             "is_done": bool(verification.get("is_done"))}
 
 
-def _fully_done(stats_is_done, verification: dict | None, export_done) -> bool:
+_UNFINISHED_RUN_STATES = {"pending", "running", "uploading"}
+
+
+def _fully_done(stats_is_done, verification: dict | None, export_done,
+                run_status=None) -> bool:
     """Run done AND (no verification, or verification done) AND export done."""
-    if not stats_is_done:
+    if not stats_is_done or str(run_status).lower() in _UNFINISHED_RUN_STATES:
         return False
     if verification is not None and not verification["is_done"]:
         return False
@@ -790,7 +794,7 @@ def get_run_impl(client, run_id: str, full: bool = False) -> dict:
                  or ("done" if stats.get("is_done") else "running"))
     verification = _verification_out(detail)
     export_done = detail.get("export_done")
-    is_done = _fully_done(stats.get("is_done"), verification, export_done)
+    is_done = _fully_done(stats.get("is_done"), verification, export_done, run_status)
 
     status = run_status
     note = None

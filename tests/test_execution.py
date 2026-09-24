@@ -1029,3 +1029,13 @@ def test_get_run_full_tolerates_missing_credits_breakdown():
     out = get_run_impl(routed_client(routes), "run1", full=True)
     assert "credits_breakdown" not in out
     assert out["stats"]["id"] == "run1"
+
+
+def test_get_run_is_not_done_while_uploading():
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True,
+                                         "percent_done": "100%"},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "uploading",
+                                   "export_done": None},
+    }
+    assert get_run_impl(routed_client(routes), "run1")["is_done"] is False
