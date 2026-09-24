@@ -1039,3 +1039,20 @@ def test_get_run_is_not_done_while_uploading():
                                    "export_done": None},
     }
     assert get_run_impl(routed_client(routes), "run1")["is_done"] is False
+
+
+def test_run_scraper_settings_only_input_keeps_saved_settings():
+    bodies = []
+    routes = {
+        ("GET", "/v1/squids/sq1"): {"id": "sq1", "crawler": "gm", "name": "My GM",
+                                    "params": {"language": "en", "max_results": 3}},
+        ("GET", "/v1/crawlers/gm"): CRAWLER_WITH_SQUID_PARAM,
+        ("GET", "/v1/user/balance"): {"available": 1000},
+        ("GET", "/v1/tasks"): {"total_pages": 1, "page": 1,
+                               "data": [{"id": "t1", "params": {"query": "dentists"}}]},
+        ("POST", "/v1/squids/sq1"): lambda r, b: (bodies.append(b), httpx.Response(200, json={}))[1],
+        ("POST", "/v1/runs"): {"id": "run2", "status": "pending"},
+    }
+    run_scraper_impl(routed_client(routes), SETTINGS, IdempotencyStore(),
+                     confirm=True, squid_id="sq1", input={"max_results": 20})
+    assert bodies[0]["params"] == {"language": "en", "max_results": 20}

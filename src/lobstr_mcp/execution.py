@@ -621,7 +621,8 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
         if input:
             update_body = {
                 "name": existing_squid.get("name") or crawler.get("name") or scraper,
-                "params": squid_params,
+                # the API replaces params wholesale, so send the saved ones too
+                "params": effective,
             }
             if accounts_to_save:
                 update_body["accounts"] = accounts_to_save
