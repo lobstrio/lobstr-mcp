@@ -163,11 +163,6 @@ def whoami_impl(client: LobstrClient) -> dict:
         "plan": plan.get("name"),
         "plan_status": plan.get("status"),
         "credit_interval": u.get("credit_interval"),
-        "credits_note": (
-            "No credit figure is reported here; check_credits is the only tool "
-            "that reports credits and slots. credit_interval says which period "
-            "those figures will cover ('daily' = today only)."
-        ),
         "server_version": __version__,
     }
 

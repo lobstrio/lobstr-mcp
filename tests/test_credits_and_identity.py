@@ -155,8 +155,9 @@ def test_whoami_reports_no_credit_figure_at_all():
     assert 16382.6 not in out.values()
     assert not any(k in out for k in ("consumed", "total_consumed", "credits",
                                       "total_credits", "available"))
-    assert out["credits_note"].startswith("No credit figure is reported here")
-    assert "check_credits" in out["credits_note"]
+    # No credits_note either: it only ever repeated "check_credits reports
+    # credits", not something whoami's own fields need explaining.
+    assert "credits_note" not in out
 
 
 def test_whoami_builds_the_name_the_api_actually_returns():
@@ -170,7 +171,7 @@ def test_whoami_ships_no_key_that_is_always_null():
     out = whoami_impl(client_for({"/v1/me": ME}))
     assert "id" not in out
     assert set(out) == {"email", "name", "is_staff", "plan", "plan_status",
-                        "credit_interval", "credits_note", "server_version"}
+                        "credit_interval", "server_version"}
 
 
 def test_whoami_name_is_null_only_when_the_account_has_neither_name():
