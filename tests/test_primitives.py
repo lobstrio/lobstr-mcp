@@ -246,3 +246,21 @@ def test_estimate_run_surfaces_api_estimate():
     assert out["max_results"] == 800
     assert out["tasks"]["count"] == 8
     assert out["services"][0]["credits"] == 300
+
+
+def test_update_scraper_sends_saved_params_with_the_change():
+    import json
+    from lobstr_mcp.tools.primitives import update_scraper_impl
+    saved = {**SQUID, "params": {"language": "en", "max_results": 3,
+                                 "functions": {"a": True, "b": False}}}
+    bodies = []
+
+    def handler(request):
+        if request.method == "POST":
+            bodies.append(json.loads(request.content))
+            return httpx.Response(200, json={"id": "sq1", "name": "N"})
+        return httpx.Response(200, json=saved if request.url.path == "/v1/squids/sq1" else {})
+    c = LobstrClient("https://api.lobstr.io/v1", "t", transport=httpx.MockTransport(handler))
+    update_scraper_impl(c, "sq1", config={"max_results": 2, "functions": {"b": True}})
+    assert bodies[0]["params"] == {"language": "en", "max_results": 2,
+                                   "functions": {"a": True, "b": True}}

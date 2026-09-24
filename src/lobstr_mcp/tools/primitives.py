@@ -16,6 +16,7 @@ import httpx
 
 from lobstr_mcp.auth.scopes import EXECUTE_SCOPES, READ_SCOPES
 from lobstr_mcp.errors import LobstrAPIError, structured, to_error_dict
+from lobstr_mcp.execution import _effective_settings
 from lobstr_mcp.lobstr_client import LobstrClient, resolve_crawler_id
 from lobstr_mcp.render import toon_result
 from lobstr_mcp.safeguards import validate_input, verification_cost_note
@@ -254,7 +255,8 @@ def update_scraper_impl(client: LobstrClient, squid_id: str, name: str | None = 
     if name is not None:
         body["name"] = name
     if cfg:
-        body["params"] = _apply_wire_names(cfg, wire_names)
+        # the API replaces params wholesale, so send the saved ones too
+        body["params"] = _effective_settings(squid, _apply_wire_names(cfg, wire_names))
     if effective_concurrency is not None:
         body["concurrency"] = effective_concurrency
     if "params" in body and "name" not in body:
