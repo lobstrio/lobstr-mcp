@@ -28,6 +28,7 @@ from lobstr_mcp.account_linking import (
 from lobstr_mcp.errors import LobstrAPIError, structured, to_error_dict, transport_error_dict
 from lobstr_mcp.lobstr_client import resolve_crawler_id
 from lobstr_mcp.safeguards import (
+    DERIVED_IDEMPOTENCY_TTL,
     CostEstimate,
     compute_idempotency_key,
     estimate_cost,
@@ -470,7 +471,16 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
         if errors:
             return {"error_code": "validation_error", "errors": errors}
 
-    key = idempotency_key or compute_idempotency_key(squid_id or scraper, input)
+    # Scoped per user so different callers never dedupe each other. An
+    # explicit key is the caller's own retry token (normal TTL); a derived
+    # one only guards a retry storm, not a genuine later re-run.
+    user_scope = client.user_scope()
+    if idempotency_key:
+        key = f"{user_scope}:{idempotency_key}"
+        key_ttl = None
+    else:
+        key = "derived:" + compute_idempotency_key(user_scope, squid_id or scraper, input)
+        key_ttl = DERIVED_IDEMPOTENCY_TTL
     existing = idem_store.get(key)
     if existing:
         return {"status": "already_submitted", "run_id": existing, "idempotent": True}
@@ -687,7 +697,7 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
             return _restore_tasks(client, squid_id, (saved_rows, saved_count), failed)
         return failed
     run_id = run["id"]
-    idem_store.put(key, run_id)
+    idem_store.put(key, run_id, ttl=key_ttl)
 
     # account_attached answers "does this squid have an account attached now",
     # not "did this call attach one" — a reused squid whose account was

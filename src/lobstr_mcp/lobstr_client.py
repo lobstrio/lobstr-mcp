@@ -14,6 +14,7 @@ MCP-specific surface on top:
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from contextlib import contextmanager
 from typing import Any, Iterator
@@ -253,6 +254,12 @@ class LobstrClient:
             params["page_size"] = page_size
         with _as_lobstr_error("/results"):
             return self._llhttp.get("/results", params=params)
+
+    def user_scope(self) -> str:
+        """Opaque, stable-per-identity string for scoping local state (the
+        idempotency store) — never the raw token."""
+        auth_header = self._http.headers.get("authorization", "")
+        return hashlib.sha256(auth_header.encode("utf-8")).hexdigest()[:32]
 
     def close(self) -> None:
         self._sdk.close()

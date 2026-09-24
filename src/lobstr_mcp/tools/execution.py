@@ -100,6 +100,12 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
         attached it or an earlier one did) — not whether this specific call
         was the one that attached it.
 
+        `idempotency_key`, when passed, is your own retry token: calling again
+        with it replays the same run_id. Without one, an identical call
+        (scraper/squid_id + input) is deduped for a couple of minutes only —
+        enough for a retry storm, not a genuine later re-run — and scoped to
+        your own account.
+
         If the API never answers (timeout, dropped connection), the error says
         which of two things happened, and they need different handling:
         `request_state` "not_sent" means the request never reached Lobstr, so

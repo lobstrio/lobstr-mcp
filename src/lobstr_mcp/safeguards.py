@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import time
 from dataclasses import dataclass
 
 _PY_TYPE_OK = {
@@ -201,19 +202,37 @@ def estimate_cost(crawler: dict, task_count: int = 1,
     )
 
 
-def compute_idempotency_key(scraper: str, values: dict) -> str:
-    blob = scraper + "|" + json.dumps(values, sort_keys=True, default=str)
+# Explicit idempotency_key = caller's own retry token, normal (long) TTL.
+# A derived key (none given) only guards a retry storm, not a later re-run.
+DERIVED_IDEMPOTENCY_TTL = 120  # 2 minutes
+DEFAULT_IDEMPOTENCY_TTL = 24 * 3600  # 1 day, matches persistence.RedisIdempotencyStore
+
+
+def compute_idempotency_key(user_scope: str, scraper: str, values: dict) -> str:
+    """Scoped per user (opaque, see LobstrClient.user_scope) so two callers
+    with the same scraper/input don't dedupe each other's runs."""
+    blob = user_scope + "|" + scraper + "|" + json.dumps(values, sort_keys=True, default=str)
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
 class IdempotencyStore:
-    """Maps an idempotency key to the run_id it created (in-memory for now)."""
+    """Maps an idempotency key to the run_id it created (in-memory, TTL'd)."""
 
-    def __init__(self) -> None:
-        self._d: dict[str, str] = {}
+    def __init__(self, ttl: int = DEFAULT_IDEMPOTENCY_TTL) -> None:
+        self._d: dict[str, tuple[str, float | None]] = {}
+        self._ttl = ttl
 
     def get(self, key: str) -> str | None:
-        return self._d.get(key)
+        entry = self._d.get(key)
+        if entry is None:
+            return None
+        run_id, expires_at = entry
+        if expires_at is not None and time.time() >= expires_at:
+            del self._d[key]
+            return None
+        return run_id
 
-    def put(self, key: str, run_id: str) -> None:
-        self._d[key] = run_id
+    def put(self, key: str, run_id: str, ttl: int | None = None) -> None:
+        ttl = self._ttl if ttl is None else ttl
+        expires_at = (time.time() + ttl) if ttl else None
+        self._d[key] = (run_id, expires_at)

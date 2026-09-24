@@ -137,6 +137,77 @@ def test_idempotency_returns_same_run_without_re_executing():
     assert second["run_id"] == "run1" and second["idempotent"] is True
 
 
+def _client_with_token(routes, token):
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content) if request.content else None
+        resp = routes[(request.method, request.url.path)]
+        return resp(request, body) if callable(resp) else httpx.Response(200, json=resp)
+    return LobstrClient("https://api.lobstr.io/v1", token,
+                        transport=httpx.MockTransport(handler))
+
+
+def test_idempotency_is_scoped_per_user_not_shared():
+    # Two different callers (different tokens) running the same scraper with
+    # the same input must NOT dedupe against each other.
+    store = IdempotencyStore()
+    routes1 = happy_routes()
+    client1 = _client_with_token(routes1, "token-user-1")
+    first = run_scraper_impl(client1, SETTINGS, store, "gm", {"query": "x"}, confirm=True)
+    assert first["run_id"] == "run1"
+
+    routes2 = happy_routes()
+    routes2[("POST", "/v1/runs")] = {"id": "run2", "status": "pending"}
+    client2 = _client_with_token(routes2, "token-user-2")
+    second = run_scraper_impl(client2, SETTINGS, store, "gm", {"query": "x"}, confirm=True)
+    assert second.get("status") != "already_submitted"
+    assert second["run_id"] == "run2"
+
+
+def test_idempotency_without_a_key_only_dedupes_briefly(monkeypatch):
+    # A derived key (no idempotency_key passed) must not block a genuine
+    # re-run minutes/hours later — only a near-immediate retry (retry-storm
+    # protection). Simulate time passing well past DERIVED_IDEMPOTENCY_TTL.
+    import lobstr_mcp.safeguards as safeguards_mod
+
+    clock = {"t": 1_000_000.0}
+    monkeypatch.setattr(safeguards_mod.time, "time", lambda: clock["t"])
+
+    store = IdempotencyStore()
+    client1 = routed_client(happy_routes())
+    first = run_scraper_impl(client1, SETTINGS, store, "gm", {"query": "x"}, confirm=True)
+    assert first["run_id"] == "run1"
+
+    clock["t"] += 3600  # an hour later
+    routes2 = happy_routes()
+    routes2[("POST", "/v1/runs")] = {"id": "run2", "status": "pending"}
+    client2 = routed_client(routes2)
+    second = run_scraper_impl(client2, SETTINGS, store, "gm", {"query": "x"}, confirm=True)
+    assert second.get("status") != "already_submitted"
+    assert second["run_id"] == "run2"
+
+
+def test_idempotency_explicit_key_survives_longer_than_the_derived_one(monkeypatch):
+    # An explicit idempotency_key is the caller's own retry token: it must
+    # still dedupe after the short derived-key window has elapsed.
+    import lobstr_mcp.safeguards as safeguards_mod
+
+    clock = {"t": 1_000_000.0}
+    monkeypatch.setattr(safeguards_mod.time, "time", lambda: clock["t"])
+
+    store = IdempotencyStore()
+    client1 = routed_client(happy_routes())
+    first = run_scraper_impl(client1, SETTINGS, store, "gm", {"query": "x"},
+                             confirm=True, idempotency_key="my-retry-token")
+    assert first["run_id"] == "run1"
+
+    clock["t"] += 3600  # an hour later — past the derived TTL, not the explicit one
+    client2 = routed_client({("GET", "/v1/crawlers/gm"): CRAWLER_GM})
+    second = run_scraper_impl(client2, SETTINGS, store, "gm", {"query": "x"},
+                              confirm=True, idempotency_key="my-retry-token")
+    assert second["status"] == "already_submitted"
+    assert second["run_id"] == "run1"
+
+
 def test_get_run_normalizes_status():
     client = routed_client({
         ("GET", "/v1/runs/run1/stats"):
