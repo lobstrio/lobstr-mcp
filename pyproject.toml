@@ -15,7 +15,7 @@ dependencies = [
     # max_pages cap + user_agent/transport hooks + raw payloads it relies on.
     "lobstrio-sdk>=0.4.0",
     "redis>=8.1.0",
-    "sentry-sdk>=2.0",
+    "sentry-sdk>=2.69.2",
 ]
 
 [project.urls]
