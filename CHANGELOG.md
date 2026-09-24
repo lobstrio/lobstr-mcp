@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 [Semantic Versioning](https://semver.org/) and are pre-1.0, so a minor bump may change behaviour.
 The number lives in `pyproject.toml` and is read through `lobstr_mcp.__version__`.
 
+## [0.5.1] - 2026-09-24
+
+### Fixed
+
+- `run_scraper(squid_id=..., input=<settings only>)` keeps the squid's saved settings instead of
+  replacing them with the ones passed (#4).
+
 ## [0.5.0] - 2026-09-24
 
 ### Added
