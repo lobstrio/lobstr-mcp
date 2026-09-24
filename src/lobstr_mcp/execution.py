@@ -809,6 +809,10 @@ def get_run_impl(client, run_id: str, full: bool = False) -> dict:
     # The raw stats blob duplicates the fields above; only ship it on request.
     if full:
         out["stats"] = stats
+        try:
+            out["credits_breakdown"] = client.get_run_credits(run_id)
+        except LobstrAPIError:
+            pass  # older runs predate the credit ledger (404)
     return out
 
 

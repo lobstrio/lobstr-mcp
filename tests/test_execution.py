@@ -982,6 +982,26 @@ def test_get_run_omits_raw_stats_by_default_and_includes_with_full():
         ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True,
                                          "percent_done": "100%"},
         ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5},
+        ("GET", "/v1/runs/run1/credits"): {"run_id": "run1", "total_credits": 5,
+                                           "breakdown": [{"function": "scrape",
+                                                         "credits": 5, "attempts": 10}]},
     }
     assert "stats" not in get_run_impl(routed_client(routes), "run1")
-    assert get_run_impl(routed_client(routes), "run1", full=True)["stats"]["id"] == "run1"
+    full = get_run_impl(routed_client(routes), "run1", full=True)
+    assert full["stats"]["id"] == "run1"
+    assert full["credits_breakdown"]["breakdown"][0]["function"] == "scrape"
+
+
+def test_get_run_full_tolerates_missing_credits_breakdown():
+    # Old runs predate the credit ledger — a 404 there must not fail the call.
+    routes = {
+        ("GET", "/v1/runs/run1/stats"): {"id": "run1", "is_done": True,
+                                         "percent_done": "100%"},
+        ("GET", "/v1/runs/run1"): {"id": "run1", "status": "done", "credit_used": 5},
+        ("GET", "/v1/runs/run1/credits"): lambda r, b: httpx.Response(
+            404, json={"errors": {"message": "Run not found.", "type": "HTTPNotFound",
+                                  "code": 404}}),
+    }
+    out = get_run_impl(routed_client(routes), "run1", full=True)
+    assert "credits_breakdown" not in out
+    assert out["stats"]["id"] == "run1"

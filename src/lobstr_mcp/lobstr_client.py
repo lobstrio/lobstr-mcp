@@ -141,6 +141,12 @@ class LobstrClient:
         with _as_lobstr_error(f"/runs/{run_hash}"):
             return self._sdk.runs.get(run_hash).raw
 
+    def get_run_credits(self, run_hash: str) -> dict:
+        """Per-function credit breakdown: total + [{function, credits,
+        attempts}, ...]."""
+        with _as_lobstr_error(f"/runs/{run_hash}/credits"):
+            return self._llhttp.get(f"/runs/{run_hash}/credits")
+
     def get_balance(self) -> dict:
         with _as_lobstr_error("/user/balance"):
             return self._sdk.balance().raw

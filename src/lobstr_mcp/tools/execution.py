@@ -132,7 +132,9 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
                            "destructiveHint": False, "openWorldHint": True})
     def get_run(run_id: str, full: bool = False, toon: bool = False) -> dict:
         """Check the status/progress of a run. Returns JSON; pass toon=true for
-        compact TOON. Pass full=true to also include the raw stats blob.
+        compact TOON. Pass full=true to also include the raw stats blob and a
+        `credits_breakdown` (per-function credits/attempts; omitted on older
+        runs).
 
         `is_done` is true only once the run itself finished AND (it has no
         email-verification step, or that step finished too) AND its export is
