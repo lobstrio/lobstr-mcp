@@ -54,7 +54,7 @@ only works over `https://`.
 
 ## Tools
 
-20 tools. There is no per-scraper tool — new lobstr.io scrapers work with
+22 tools. There is no per-scraper tool — new lobstr.io scrapers work with
 **zero** code changes. Full behaviour, error codes and the intended call
 sequence: [`docs/tools.md`](docs/tools.md), [`docs/errors.md`](docs/errors.md).
 
@@ -66,12 +66,14 @@ sequence: [`docs/tools.md`](docs/tools.md), [`docs/errors.md`](docs/errors.md).
 | `get_my_scraper` | One saved configuration by id |
 | `create_squid` | Save a new scraper configuration without running it |
 | `add_tasks` | Add input rows to a saved configuration |
+| `update_scraper` | Change a saved configuration's name, settings or concurrency without running it |
 | `estimate_run` | Authoritative cost/time estimate before running |
 | `run_scraper` | Configure and run a scraper in one call — **spends credits** |
 | `attach_account` | Link a connected platform account to a scraper |
 | `empty_scraper` | Clear a scraper's saved inputs, keep its config |
 | `deactivate_scraper` | Free a scraper's concurrency slot without deleting it |
 | `get_run` | Status and progress of a run |
+| `wait_for_run` | Wait for a run to finish, up to 50 s per call |
 | `list_runs` | Recent runs for a scraper |
 | `get_results` | One page of a run's results |
 | `get_results_url` | A signed download URL for a run's full results |

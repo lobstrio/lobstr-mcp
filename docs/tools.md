@@ -1,6 +1,6 @@
 # Tool reference
 
-Detailed behaviour for each of the 20 tools. For the one-line summary and
+Detailed behaviour for each of the 22 tools. For the one-line summary and
 scopes, see the [README](../README.md#tools). This page follows the tool
 docstrings the AI client actually reads (`src/lobstr_mcp/tools/*.py`); if the
 two ever disagree, the docstring in the code is the source of truth.
@@ -62,6 +62,13 @@ Scope: `runs:execute`.
 
 Adds task rows (a list of dicts of the crawler's task-level inputs) to an
 existing squid. Callable repeatedly to build up a batch before running.
+
+### `update_scraper(squid_id, name=None, config=None, concurrency=None)`
+Scope: `runs:execute`.
+
+Changes an existing squid's `name`, `config` (same shape and aliases as
+`create_squid`'s) and/or `concurrency`, without running it or touching its
+saved tasks. Pass at least one.
 
 ### `estimate_run(squid_id, toon=False)`
 Scope: `crawlers:read`.
@@ -144,6 +151,14 @@ Status/progress of a run: `status` (`pending` / `running` / `done` / `error` /
 `paused` / `aborted`), `progress`, `tasks_total`/`tasks_done`,
 `total_results`, `credits_consumed`, `done_reason`. `full=true` includes the
 raw stats blob.
+
+### `wait_for_run(run_id, timeout_seconds=30, toon=False)`
+Scope: `runs:read`.
+
+Polls `get_run` until the run is fully done or `timeout_seconds` elapses
+(capped at 50 s whatever is passed). Returns `get_run`'s shape; if the run is
+still going, `status` is `still_running` and `timed_out` is `true` — call it
+again to keep waiting.
 
 ### `list_runs(squid_id, limit=20, toon=False)`
 Scope: `runs:read`.

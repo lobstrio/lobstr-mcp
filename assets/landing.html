@@ -417,11 +417,11 @@
         </div>
         <div class="hero-meta">
           <span class="mi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Sign in with lobstr.io — no API key</span>
-          <span class="mi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 15 tools · read &amp; run · credit‑safe</span>
+          <span class="mi"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 22 tools · read &amp; run · credit‑safe</span>
         </div>
         <div class="clients">
           <b>Works in</b>
-          <span class="c">Claude</span><span class="c">ChatGPT</span><span class="c">Cursor</span><span class="c">VS Code</span>
+          <span class="c">Claude</span><span class="c">ChatGPT</span><span class="c">Cursor</span><span class="c">Grok</span><span class="c">VS Code</span>
         </div>
       </div>
 
@@ -504,7 +504,7 @@
       <div class="center">
         <p class="kick">The toolbox</p>
         <h2>Everything your agent can do</h2>
-        <p class="h2-sub">Fifteen tools, grouped by what they touch. Reading is always safe — running a scraper
+        <p class="h2-sub">Twenty-two tools, grouped by what they touch. Reading is always safe — running a scraper
           estimates the cost and asks you first, so nothing spends credits by surprise.</p>
       </div>
       <div class="cards">
@@ -530,9 +530,10 @@
             <h3>Track runs</h3>
             <span class="pill read">Read</span>
           </div>
-          <p>Check the status and progress of any run — and list the recent runs for a scraper.</p>
+          <p>Check the status and progress of any run, wait for one to finish — and list the recent runs for a scraper.</p>
           <div class="chips">
             <span class="chip">get_run</span>
+            <span class="chip">wait_for_run</span>
             <span class="chip">list_runs</span>
           </div>
         </div>
@@ -567,12 +568,27 @@
           <div class="ct">
             <span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>
             <h3>Connected accounts</h3>
-            <span class="pill read">Read</span>
+            <span class="pill read">Free</span>
           </div>
-          <p>See the platform accounts (LinkedIn, Facebook, …) your scrapers log in with, and their status — metadata only, never credentials.</p>
+          <p>See the platform accounts (LinkedIn, Facebook, …) your scrapers log in with and their status, and link one to a scraper — metadata only, never credentials.</p>
           <div class="chips">
             <span class="chip">list_accounts</span>
             <span class="chip">get_account</span>
+            <span class="chip">attach_account</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="ct">
+            <span class="ico"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg></span>
+            <h3>Build a run</h3>
+            <span class="pill read">Free</span>
+          </div>
+          <p>Create a scraper without running it, add input rows in batches, and see the credit cost and time estimate before anything starts.</p>
+          <div class="chips">
+            <span class="chip">create_squid</span>
+            <span class="chip">add_tasks</span>
+            <span class="chip">estimate_run</span>
           </div>
         </div>
 
@@ -582,11 +598,13 @@
             <h3>Run &amp; manage</h3>
             <span class="pill exec">Spends credits</span>
           </div>
-          <p>Launch a scraper on your behalf — it estimates the cost and waits for your OK first. Stop a run, or clear a scraper's tasks to reuse it (those are free).</p>
+          <p>Launch a scraper on your behalf — it estimates the cost and waits for your OK first. Change a saved scraper's settings, stop a run, clear its tasks to reuse it, or free its slot (those are free).</p>
           <div class="chips">
             <span class="chip">run_scraper</span>
+            <span class="chip">update_scraper</span>
             <span class="chip">abort_run</span>
             <span class="chip">empty_scraper</span>
+            <span class="chip">deactivate_scraper</span>
           </div>
         </div>
 
