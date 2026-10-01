@@ -170,6 +170,9 @@ def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = Non
                         "scraper": crawler_id}
             levels = translated.get("levels") or {}
             for k, v in (translated.get("defaults_to_fill") or {}).items():
+                # task-level defaults belong to add_tasks; as squid params the API rejects them
+                if levels.get(k) == "task":
+                    continue
                 target = cfg.setdefault("functions", {}) if levels.get(k) == "function" else cfg
                 target.setdefault(k, v)
 
