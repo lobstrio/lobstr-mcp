@@ -13,15 +13,15 @@ from lobstr_mcp.schema_translator import translate_input_schema
 
 
 def _summary(crawler: dict) -> dict:
-    """Field names match a live GET /crawlers item — there is no "pricing" or
-    "platform" key, pricing is exposed per row / per enriched email."""
+    """Field names match a live GET /crawlers item. Paid add-ons (email
+    enrichment...) are priced in get_scraper_details' `paid_functions`."""
     return {
         "id": crawler.get("id"),
         "name": crawler.get("name"),
         "slug": crawler.get("slug"),
         "description": crawler.get("description", ""),
         "credits_per_row": resolve_credit_rate(crawler.get("credits_per_row")),
-        "credits_per_email": resolve_credit_rate(crawler.get("credits_per_email")),
+        "email_verification_credits": resolve_credit_rate(crawler.get("credits_per_email")),
         "is_premium": crawler.get("is_premium"),
         "is_available": crawler.get("is_available"),
     }
@@ -224,6 +224,22 @@ _ZIP_CODE_SEARCHES_NEARBY_SLUGS = {"google-maps-leads-scraper"}
 
 
 @structured
+def _paid_functions(crawler: dict) -> list[dict]:
+    """Add-ons billed on top of each row (LinkedIn email enrichment, Sales
+    Navigator phone...), at the current-plan rate."""
+    out = []
+    for item in crawler.get("input", []):
+        if not isinstance(item, dict) or "credits_per_function" not in item:
+            continue
+        rate = resolve_credit_rate(item["credits_per_function"])
+        if rate is None:
+            continue
+        billed = (item.get("cost_description") or "").replace("{credits}", f"{rate:g}")
+        out.append({"name": item.get("name"), "credits": rate, "on_by_default": bool(item.get("default")),
+                    "billed": billed or None})
+    return out
+
+
 def get_scraper_details_impl(client: LobstrClient, scraper: str, full: bool = False) -> dict:
     scraper = resolve_crawler_id(client, scraper)
     crawler = client.get_crawler(scraper)
@@ -253,7 +269,9 @@ def get_scraper_details_impl(client: LobstrClient, scraper: str, full: bool = Fa
         "output_fields": crawler.get("result", []),
         # (param_wire_names is added below, only when this crawler has one.)
         "credits_per_row": resolve_credit_rate(crawler.get("credits_per_row")),
-        "credits_per_email": resolve_credit_rate(crawler.get("credits_per_email")),
+        "paid_functions": _paid_functions(crawler),
+        # price of verifying an email (auto_verify_emails), not of finding one
+        "email_verification_credits": resolve_credit_rate(crawler.get("credits_per_email")),
         "is_available": crawler.get("is_available"),
         "max_concurrency": crawler.get("max_concurrency"),
         # None when this crawler needs no platform account at all; otherwise
@@ -449,6 +467,9 @@ def register_scraper_tools(mcp, client_factory, authorizer=None) -> None:
         prefixed alias (e.g. `squid_country`) and `param_wire_names` maps that
         alias to the name the API knows — run_scraper's `input` takes the
         alias, create_squid's `config` and add_tasks take the API name.
+        Pricing: `credits_per_row`, plus each `paid_functions` entry that is
+        on (e.g. LinkedIn email enrichment, 9 credits per email found);
+        `email_verification_credits` is only the price of verifying an email.
         `required_account_type`
         is null when no platform account is needed, else the account type a
         squid built from this crawler must have attached (via attach_account or

@@ -78,7 +78,7 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
         (it assumes the row cap is reached); `estimate_run(squid_id=...)` is
         the API's own figure. Neither includes email verification, billed
         separately after the scrape when `auto_verify_emails` is on — when it
-        is, `estimate.verification_note` sizes it from `credits_per_email`;
+        is, `estimate.verification_note` sizes it from `email_verification_credits`;
         add that on top yourself, it's never folded into `estimate.credits`.
         Affordability is the API's call, not this tool's:
         it refuses an ordinary account whose period spend has reached its
@@ -149,6 +149,11 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
         file is ready. `total_unique_results` sits next to `total_results`;
         get_results' own total_results is the count to trust for fetchable
         rows.
+
+        `account_limit` (done_reason_code "limit_exceeded") means the attached
+        platform account hit its own daily limit — not a lobstr.io credits
+        problem. A paused run with `next_launch_at` relaunches by itself then
+        and spends credits; tell the user, or abort_run to stop it.
 
         wait_for_run(run_id=...) polls this for you."""
         authz(RUN_READ_SCOPES)

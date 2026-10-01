@@ -250,7 +250,7 @@ def test_search_summary_reports_real_pricing_and_slug():
     out = search_scrapers_impl(C(), "google maps")
     top = out["results"][0]
     assert top["credits_per_row"] == 1, "the {legacy,current} dict must be resolved"
-    assert top["credits_per_email"] == 2, "current rate, not legacy"
+    assert top["email_verification_credits"] == 2, "current rate, not legacy"
     assert top["slug"] == "google-maps-leads-scraper"
     assert top["is_available"] is True
 

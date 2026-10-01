@@ -779,6 +779,22 @@ def _fully_done(stats_is_done, verification: dict | None, export_done,
 
 
 @structured
+def _account_limit_out(client, squid_id: str | None) -> dict:
+    """A run paused on `limit_exceeded`: the platform account's own daily limit,
+    not lobstr.io credits (clients told users to top up credits)."""
+    limited = []
+    if squid_id:
+        try:
+            limited = (client.get_squid(squid_id) or {}).get("last_run_limited_accounts") or []
+        except (LobstrAPIError, httpx.TransportError):
+            limited = []
+    return {"limited_accounts": limited,
+            "message": ("The platform account attached to this squid (e.g. LinkedIn) hit its "
+                        "own daily limit. This is not a lobstr.io credits problem: topping up "
+                        "credits won't help. Wait for the account's limit to reset (get_account "
+                        "shows lock_time), or attach another account with attach_account.")}
+
+
 def get_run_impl(client, run_id: str, full: bool = False) -> dict:
     stats = client.get_run_stats(run_id)
     # /runs/{hash}/stats has progress but no status field, so deriving status
@@ -818,6 +834,16 @@ def get_run_impl(client, run_id: str, full: bool = False) -> dict:
             "done_reason": detail.get("done_reason_desc") or detail.get("done_reason"),
             "started_at": stats.get("started_at"),
             "ended_at": stats.get("ended_at"), "duration": stats.get("duration")}
+    done_code = detail.get("done_reason")
+    if done_code:
+        out["done_reason_code"] = done_code
+    if done_code == "limit_exceeded":
+        out["account_limit"] = _account_limit_out(client, detail.get("squid"))
+    if str(run_status).lower() == "paused" and detail.get("next_launch_at"):
+        out["next_launch_at"] = detail["next_launch_at"]
+        out["relaunch_note"] = ("This paused run relaunches by itself at next_launch_at and "
+                                "spends credits then; call abort_run(run_id=...) if the user "
+                                "doesn't want that.")
     if "total_unique_results" in detail:
         out["total_unique_results"] = detail.get("total_unique_results")
         out["total_results_note"] = ("get_results' own total_results is the count to trust "

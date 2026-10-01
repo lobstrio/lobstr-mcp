@@ -105,7 +105,7 @@ def test_similar_entries_share_results_field_set_plus_matched_missing():
     out = search_scrapers_impl(_client(), "Reddit search posts comments")
     row = out["similar"][0]
     for key in ("id", "name", "slug", "description", "credits_per_row",
-                "credits_per_email", "is_premium", "is_available"):
+                "email_verification_credits", "is_premium", "is_available"):
         assert key in row
     assert "matched" in row and "missing" in row
 

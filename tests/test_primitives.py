@@ -209,7 +209,7 @@ def test_estimate_run_notes_verification_cost_when_on_with_known_rate():
     assert out["total_credits"] == 26
     assert "verification_note" in out
     assert "does NOT include email verification" in out["verification_note"]
-    assert "credits_per_email=1" in out["verification_note"]
+    assert "email_verification_credits=1" in out["verification_note"]
 
 
 def test_estimate_run_notes_verification_cost_when_rate_unknown():
@@ -220,7 +220,7 @@ def test_estimate_run_notes_verification_cost_when_rate_unknown():
     })
     out = estimate_run_impl(c, "sq1")
     assert "verification_note" in out
-    assert "no credits_per_email to size it" in out["verification_note"]
+    assert "no email_verification_credits to size it" in out["verification_note"]
 
 
 def test_estimate_run_has_no_verification_note_when_verification_is_off():

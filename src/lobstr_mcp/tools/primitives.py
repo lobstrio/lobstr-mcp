@@ -394,7 +394,7 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
         neither this figure nor run_scraper's — and neither is email
         verification, billed separately after the scrape when
         `auto_verify_emails` is on. When it is, `verification_note` sizes it
-        from the crawler's `credits_per_email`; add that to `total_credits`
+        from the crawler's `email_verification_credits`; add that to `total_credits`
         yourself, it is not folded in.
 
         `estimated_time` is a floor, not an ETA: it assumes every row fetched
