@@ -57,6 +57,8 @@ def _summary(a: dict) -> dict:
         out["health_note"] = note
     if a.get("lock_time"):
         out["lock_time"] = a.get("lock_time")
+    if a.get("resets_in"):
+        out["resets_in_seconds"] = a.get("resets_in")
     return out
 
 

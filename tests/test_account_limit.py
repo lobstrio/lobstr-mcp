@@ -43,10 +43,12 @@ def test_get_run_done_run_has_no_limit_or_relaunch_fields():
 def test_get_account_locked_is_not_usable_even_if_status_says_success():
     out = get_account_impl(client_for({"/v1/accounts/acc1": {
         "id": "acc1", "type": "linkedin-sync", "username": "u", "status": "200",
-        "status_code_description": "Success!", "lock_time": "2099-01-01T00:00:00Z"}}), "acc1")
+        "status_code_description": "Success!", "lock_time": "2099-01-01 00:00:00",
+        "resets_in": 3600}}), "acc1")
     assert out["status"] == "Success!"
     assert out["usable_now"] is False
-    assert "locked" in out["health_note"] and out["lock_time"] == "2099-01-01T00:00:00Z"
+    assert "locked" in out["health_note"] and out["lock_time"] == "2099-01-01 00:00:00"
+    assert out["resets_in_seconds"] == 3600
 
 
 def test_get_account_expired_cookies_is_not_usable():
