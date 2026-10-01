@@ -368,13 +368,22 @@ def list_my_scrapers_impl(client: LobstrClient, *, name: str | None = None,
 # Heavy / non-actionable squid fields not worth handing to an LLM. `icon` is a
 # ~4KB base64 SVG; `ui_state` is dashboard UI scratch state.
 _SQUID_DROP_FIELDS = ("icon", "ui_state")
+# delivery credentials never leave the API through the MCP
+_SECRET_DELIVERY_KEYS = ("password", "token", "aws_access_key", "aws_secret_key")
+
+
+def _without_secrets(value):
+    if isinstance(value, dict):
+        return {k: v for k, v in value.items() if k not in _SECRET_DELIVERY_KEYS}
+    return value
 
 
 @structured
 def get_my_scraper_impl(client: LobstrClient, squid_id: str) -> dict:
     squid = client.get_squid(squid_id)
     if isinstance(squid, dict):
-        return {k: v for k, v in squid.items() if k not in _SQUID_DROP_FIELDS}
+        return {k: (_without_secrets(v) if k.endswith("_fields") else v)
+                for k, v in squid.items() if k not in _SQUID_DROP_FIELDS}
     return squid
 
 
