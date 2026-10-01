@@ -218,11 +218,11 @@ def verification_cost_note(crawler: dict, auto_verify_emails: bool) -> str | Non
     if rate is not None:
         return (f"auto_verify_emails is on for this run — the estimate does NOT include "
                f"email verification, billed separately after the scrape at "
-               f"credits_per_email={rate} per email found; budget up to "
-               "credits_per_email x emails found on top of it.")
+               f"email_verification_credits={rate} per email verified; budget up to "
+               "email_verification_credits x emails found on top of it.")
     return ("auto_verify_emails is on for this run — the estimate does NOT include email "
            "verification, billed separately after the scrape, and this crawler publishes "
-           "no credits_per_email to size it by; budget for it separately.")
+           "no email_verification_credits to size it by; budget for it separately.")
 
 
 def compute_idempotency_key(user_scope: str, scraper: str, values: dict) -> str:

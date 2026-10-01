@@ -78,7 +78,7 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
         (it assumes the row cap is reached); `estimate_run(squid_id=...)` is
         the API's own figure. Neither includes email verification, billed
         separately after the scrape when `auto_verify_emails` is on — when it
-        is, `estimate.verification_note` sizes it from `credits_per_email`;
+        is, `estimate.verification_note` sizes it from `email_verification_credits`;
         add that on top yourself, it's never folded into `estimate.credits`.
         Affordability is the API's call, not this tool's:
         it refuses an ordinary account whose period spend has reached its

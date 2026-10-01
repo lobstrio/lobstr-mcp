@@ -16,7 +16,7 @@ import httpx
 
 from lobstr_mcp.auth.scopes import EXECUTE_SCOPES, READ_SCOPES
 from lobstr_mcp.errors import LobstrAPIError, structured, to_error_dict
-from lobstr_mcp.execution import _effective_settings
+from lobstr_mcp.execution import _effective_settings, function_defaults
 from lobstr_mcp.lobstr_client import LobstrClient, resolve_crawler_id
 from lobstr_mcp.render import toon_result
 from lobstr_mcp.safeguards import validate_input, verification_cost_note
@@ -138,6 +138,19 @@ def _config_apply_unknown(squid_id: str, crawler_id: str, detail: str) -> dict:
 
 
 @structured(verify_with="list_my_scrapers(name=...), which lists the scraper if it was created")
+def _with_function_defaults(cfg: dict, translated: dict) -> dict:
+    """cfg with every function toggle set: given values win, the rest take the
+    crawler default (see function_defaults)."""
+    defaults = function_defaults(translated)
+    if not defaults:
+        return cfg
+    cfg = dict(cfg)
+    given = cfg.get("functions") if isinstance(cfg.get("functions"), dict) else {}
+    flat = {k: cfg.pop(k) for k in defaults if k in cfg}
+    cfg["functions"] = {**defaults, **flat, **given}
+    return cfg
+
+
 def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = None,
                       config: dict | None = None,
                       concurrency: int | None = None) -> dict:
@@ -150,12 +163,14 @@ def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = Non
     effective_concurrency = concurrency if concurrency is not None else cfg_concurrency
 
     wire_names: dict = {}
+    # Best-effort schema lookup; a failure just skips translation/validation.
+    try:
+        translated = _translated_schema(client, crawler_id)
+    except Exception:
+        translated = None
+    if translated:
+        cfg = _with_function_defaults(cfg, translated)
     if cfg:
-        # Best-effort schema lookup; a failure just skips translation/validation.
-        try:
-            translated = _translated_schema(client, crawler_id)
-        except Exception:
-            translated = None
         if translated:
             wire_names = translated.get("wire_names") or {}
             # Validate before creating the squid, so an obviously-wrong
@@ -200,22 +215,23 @@ def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = Non
                        "run_scraper(squid_id=...). estimate_run gives the cost first."}
 
 
-def _squid_and_wire_names(client: LobstrClient, squid_id: str) -> tuple[dict, dict]:
-    """(wire_names, squid) for an existing squid; best-effort, skips
-    translation on failure rather than failing the caller's request."""
+def _squid_and_wire_names(client: LobstrClient, squid_id: str) -> tuple[dict, dict, dict | None]:
+    """(wire_names, squid, translated schema) for an existing squid;
+    best-effort, skips translation on failure rather than failing the
+    caller's request."""
     try:
         squid = client.get_squid(squid_id)
     except Exception:
-        return {}, {}
+        return {}, {}, None
     squid = squid if isinstance(squid, dict) else {}
     crawler_id = squid.get("crawler")
     if not crawler_id:
-        return {}, squid
+        return {}, squid, None
     try:
         translated = _translated_schema(client, crawler_id)
     except Exception:
-        return {}, squid
-    return translated.get("wire_names") or {}, squid
+        return {}, squid, None
+    return translated.get("wire_names") or {}, squid, translated
 
 
 @structured(verify_with="estimate_run(squid_id=...), whose `tasks.count` is how many input "
@@ -226,7 +242,7 @@ def add_tasks_impl(client: LobstrClient, squid_id: str, tasks: list[dict]) -> di
     if not tasks:
         return {"error_code": "invalid_request",
                 "message": "provide at least one task row in `tasks`"}
-    wire_names, _ = _squid_and_wire_names(client, squid_id)
+    wire_names, _, _ = _squid_and_wire_names(client, squid_id)
     translated_tasks = [_apply_wire_names(t, wire_names) if isinstance(t, dict) else t
                         for t in tasks]
     result = client.add_tasks(squid_id, translated_tasks)
@@ -253,7 +269,10 @@ def update_scraper_impl(client: LobstrClient, squid_id: str, name: str | None = 
         return {"error_code": "invalid_request",
                 "message": "provide at least one of name, config, concurrency"}
 
-    wire_names, squid = _squid_and_wire_names(client, squid_id)
+    wire_names, squid, translated = _squid_and_wire_names(client, squid_id)
+    saved = squid.get("params") if isinstance(squid.get("params"), dict) else {}
+    if cfg and translated and not saved.get("functions"):
+        cfg = _with_function_defaults(cfg, translated)
     body: dict = {}
     if name is not None:
         body["name"] = name
@@ -394,7 +413,7 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
         neither this figure nor run_scraper's — and neither is email
         verification, billed separately after the scrape when
         `auto_verify_emails` is on. When it is, `verification_note` sizes it
-        from the crawler's `credits_per_email`; add that to `total_credits`
+        from the crawler's `email_verification_credits`; add that to `total_credits`
         yourself, it is not folded in.
 
         `estimated_time` is a floor, not an ETA: it assumes every row fetched

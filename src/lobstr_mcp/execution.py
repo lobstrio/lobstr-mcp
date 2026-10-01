@@ -382,6 +382,16 @@ def _rows_this_run(*, reuse: bool, has_task_input: bool, replace_tasks: bool,
     return saved_count + 1 if saved_count else 1
 
 
+def function_defaults(translated: dict) -> dict:
+    """The crawler's function toggles at their defaults. They are always saved:
+    with no toggle saved the engine runs no paid step at all, not even those
+    on by default (core/backend.py call_filling_functions)."""
+    levels = translated.get("levels") or {}
+    props = (translated.get("json_schema") or {}).get("properties") or {}
+    return {k: bool(props[k]["default"]) for k, lv in levels.items()
+            if lv == _FUNCTION_LEVEL and "default" in props.get(k, {})}
+
+
 def _effective_settings(existing_squid: dict, squid_params: dict) -> dict:
     """The squid-level settings the run executes under: what the squid already
     has saved, with this call's input on top (function toggles merged rather
@@ -549,6 +559,9 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
                     if levels.get(k) in _SQUID_LEVELS}
     functions = {wire_names.get(k, k): v for k, v in input.items()
                  if levels.get(k) == _FUNCTION_LEVEL}
+    if not ((existing_squid if reuse else {}).get("params") or {}).get("functions"):
+        functions = {**{wire_names.get(k, k): v for k, v in function_defaults(translated).items()},
+                     **functions}
     if functions:
         squid_params["functions"] = functions
     task_params = {wire_names.get(k, k): v for k, v in input.items()
