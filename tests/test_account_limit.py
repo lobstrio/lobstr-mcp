@@ -82,3 +82,12 @@ def test_needs_confirmation_hint_asks_to_show_the_cost_to_the_user():
                            "gm", {"url": "u", "max_results": 500})
     assert out["needs_confirmation"] is True
     assert "up to 500" in out["hint"] and "never confirm on their behalf" in out["hint"]
+
+
+def test_list_accounts_linkedin_includes_sales_navigator():
+    from lobstr_mcp.tools.accounts import list_accounts_impl
+    out = list_accounts_impl(client_for({"/v1/accounts": {"data": [
+        {"id": "a1", "type": "linkedin-sync", "status": "200"},
+        {"id": "a2", "type": "sales-nav-sync", "status": "200"},
+        {"id": "a3", "type": "facebook-sync", "status": "200"}]}}), platform="linkedin")
+    assert [a["id"] for a in out["accounts"]] == ["a1", "a2"]
