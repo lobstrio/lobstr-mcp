@@ -203,9 +203,11 @@ def create_app():
     oauth_mcp, _, _ = build_oauth_server()
     # The SDK's /register, /token and /revoke routes 500 on a bare OPTIONS or a
     # non-JSON registration body (Sentry MCP-4); the guard answers those itself.
-    return oauth_mcp.http_app(middleware=[Middleware(AuthEndpointGuard)])
+    # Stateless: Claude's connector calls from many hosts and some requests
+    # carry no or an unknown session id (400 / 404 with sessions, seen as 503s).
+    return oauth_mcp.http_app(middleware=[Middleware(AuthEndpointGuard)], stateless_http=True)
 
 
 # Dev (no-auth) app for local smoke testing with LOBSTR_DEV_TOKEN.
 mcp = build_server()
-app = mcp.http_app()
+app = mcp.http_app(stateless_http=True)
