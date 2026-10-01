@@ -68,7 +68,10 @@ def list_accounts_impl(client: LobstrClient, *, platform: str | None = None,
     rows = _rows(client.list_accounts(limit=limit, page=page))
     if platform:
         p = platform.lower()
-        rows = [a for a in rows if isinstance(a, dict) and p in (a.get("type") or "").lower()]
+        # Sales Navigator accounts are LinkedIn logins typed "sales-nav-sync"
+        terms = (p, "sales-nav") if p == "linkedin" else (p,)
+        rows = [a for a in rows if isinstance(a, dict)
+                and any(t in (a.get("type") or "").lower() for t in terms)]
     return {"count": len(rows),
             "accounts": [_summary(a) for a in rows if isinstance(a, dict)]}
 
