@@ -150,6 +150,11 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
         get_results' own total_results is the count to trust for fetchable
         rows.
 
+        `account_limit` (done_reason_code "limit_exceeded") means the attached
+        platform account hit its own daily limit — not a lobstr.io credits
+        problem. A paused run with `next_launch_at` relaunches by itself then
+        and spends credits; tell the user, or abort_run to stop it.
+
         wait_for_run(run_id=...) polls this for you."""
         authz(RUN_READ_SCOPES)
         out = get_run_impl(client_factory(), run_id, full=full)

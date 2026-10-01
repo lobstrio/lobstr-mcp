@@ -143,7 +143,7 @@ def test_deactivate_scraper_posts_is_active_false():
 
 _ACCOUNTS = {"data": [
     {"id": "ac1", "type": "linkedin", "username": "ada@co", "params": {"secret": 1},
-     "cookies": {"li_at": "SENSITIVE"}, "status_code_description": "Active",
+     "cookies": {"li_at": "SENSITIVE"}, "status": "200", "status_code_description": "Active",
      "last_synchronization_time": "2026-09-01"},
     {"id": "ac2", "type": "facebook", "username": "ada.fb",
      "status_code_description": "Expired", "last_synchronization_time": "2026-08-01"},
@@ -155,7 +155,7 @@ def test_list_accounts_whitelists_and_never_leaks_credentials():
     assert out["count"] == 2
     li = out["accounts"][0]
     assert li == {"id": "ac1", "platform": "linkedin", "username": "ada@co",
-                  "status": "Active", "last_sync": "2026-09-01"}
+                  "status": "Active", "last_sync": "2026-09-01", "usable_now": True}
     blob = repr(out)
     assert "cookies" not in blob and "SENSITIVE" not in blob and "secret" not in blob
 

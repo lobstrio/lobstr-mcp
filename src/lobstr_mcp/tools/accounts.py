@@ -43,13 +43,21 @@ def _rows(payload) -> list:
 
 def _summary(a: dict) -> dict:
     """Whitelisted, non-sensitive view of a platform account."""
-    return {
+    note = account_health_note(a)
+    out = {
         "id": a.get("id"),
         "platform": a.get("type"),
         "username": a.get("username"),
         "status": a.get("status_code_description") or a.get("status_code_info"),
         "last_sync": a.get("last_synchronization_time"),
+        # the status text can read "Success!" while the account is locked or expired
+        "usable_now": note is None,
     }
+    if note:
+        out["health_note"] = note
+    if a.get("lock_time"):
+        out["lock_time"] = a.get("lock_time")
+    return out
 
 
 @structured
