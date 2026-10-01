@@ -62,3 +62,23 @@ def test_get_account_healthy():
     out = get_account_impl(client_for({"/v1/accounts/acc1": {
         "id": "acc1", "type": "linkedin-sync", "status": "200", "status_code_description": "Success!"}}), "acc1")
     assert out["usable_now"] is True and "health_note" not in out
+
+
+# --- the confirmation answer asks the client to show the price (MLhj4ohs) ---
+
+def test_needs_confirmation_hint_asks_to_show_the_cost_to_the_user():
+    from lobstr_mcp.config import Settings
+    from lobstr_mcp.execution import run_scraper_impl
+    from lobstr_mcp.safeguards import IdempotencyStore
+
+    settings = Settings(lobstr_api_base="https://api.lobstr.io/v1", dev_token=None, request_timeout=30.0,
+                        run_confirm_threshold=100, public_base_url="https://mcp.lobstr.io",
+                        service_credential=None, consent_url="https://app.lobstr.io/connect-ai")
+    crawler = {"id": "gm", "name": "Google Maps", "credits_per_row": 1,
+               "input": [{"name": "url", "type": "string", "level": "task", "required": True},
+                         {"name": "max_results", "type": "number", "level": "squid"}],
+               "result": ["name"]}
+    out = run_scraper_impl(client_for({"/v1/crawlers/gm": crawler}), settings, IdempotencyStore(),
+                           "gm", {"url": "u", "max_results": 500})
+    assert out["needs_confirmation"] is True
+    assert "up to 500" in out["hint"] and "never confirm on their behalf" in out["hint"]

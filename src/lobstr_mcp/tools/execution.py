@@ -34,8 +34,9 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
                     replace_tasks: bool = False) -> dict:
         """Configure and run a Lobstr scraper. Consumes credits. Jobs whose
         estimated cost exceeds the credit threshold (or whose cost is unknown)
-        return needs_confirmation; call again with confirm=true to execute.
-        Returns a run_id to monitor with get_run.
+        return needs_confirmation: show the user the estimated credits, and
+        call again with confirm=true only after they approve — never on their
+        behalf. Returns a run_id to monitor with get_run.
 
         Pass `scraper` (a crawler slug/id) to run a NEW scraper — this creates
         a saved scraper (squid) holding only the input you pass. Pass

@@ -592,9 +592,13 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
         elif rows_this_run is None:
             msg += (" How many input rows this scraper holds could not be read, so the "
                     "estimate covers one row and the real total may be a multiple of it.")
+        cost = ("an unknown number of credits" if est.credits is None
+                else f"up to {est.credits} credits")
         return {"needs_confirmation": True, "estimate": _estimate_dict(est, verification_note),
                 "message": msg, "rows_this_run": rows_this_run,
-                "hint": "call run_scraper again with confirm=true to execute"}
+                "hint": (f"Show the user that this run will spend {cost} and ask them to approve "
+                         "it. Only after they say yes, call run_scraper again with confirm=true; "
+                         "never confirm on their behalf.")}
 
     # Informational only — never a refusal. The API alone decides whether a
     # run can start (see _credit_warning); this is fetched before any write
