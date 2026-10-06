@@ -1077,3 +1077,11 @@ def test_get_results_lists_tasks_and_filters_by_task():
     assert seen["task"] == "tb" and "tasks" not in out
     out = get_results_impl(routed_client(routes), task_id="tb")
     assert out["error_code"] == "invalid_request"
+
+
+def test_get_results_skips_task_index_without_the_scopes():
+    routes = {("GET", "/v1/results"): {"total_results": 1, "page": 1, "total_pages": 1, "data": [{"t": 1}]},
+              ("GET", "/v1/tasks"): {"total_pages": 1, "page": 1, "data": [{"id": "ta", "params": {}},
+                                                                          {"id": "tb", "params": {}}]}}
+    out = get_results_impl(routed_client(routes), squid_id="sq1", task_index=False)
+    assert "tasks" not in out

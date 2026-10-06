@@ -919,7 +919,8 @@ _MAX_PAGE_SIZE = 100
 def get_results_impl(client, *, run_id: str | None = None, squid_id: str | None = None,
                      page: int = 1, page_size: int | None = None,
                      fields: list[str] | None = None, full: bool = False,
-                     max_rows: int | None = None, task_id: str | None = None) -> dict:
+                     max_rows: int | None = None, task_id: str | None = None,
+                     task_index: bool = True) -> dict:
     if not run_id and not squid_id:
         return {"error_code": "invalid_request",
                 "message": "provide run_id or squid_id (exactly one)"
@@ -960,7 +961,7 @@ def get_results_impl(client, *, run_id: str | None = None, squid_id: str | None 
             "available_fields": available_fields,
             "next": payload.get("next"),
             "results": capped,
-            **({} if task_id or page != 1 else _task_index(client, run_id, squid_id))}
+            **({} if task_id or page != 1 or not task_index else _task_index(client, run_id, squid_id))}
 
 
 _TASK_INDEX_CAP = 50
