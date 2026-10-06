@@ -799,6 +799,7 @@ def _account_limit_out(client, squid_id: str | None) -> dict:
                         "shows lock_time), or attach another account with attach_account.")}
 
 
+@structured
 def get_run_impl(client, run_id: str, full: bool = False) -> dict:
     stats = client.get_run_stats(run_id)
     # /runs/{hash}/stats has progress but no status field, so deriving status

@@ -247,7 +247,6 @@ _ZIP_CODE_SEARCHES_NEARBY_SLUGS = {"google-maps-leads-scraper"}
 _GEO_ID_SLUGS = {"linkedin-search-scraper"}
 
 
-@structured
 def _paid_functions(crawler: dict) -> list[dict]:
     """Add-ons billed on top of each row (LinkedIn email enrichment, Sales
     Navigator phone...), at the current-plan rate."""
@@ -264,6 +263,7 @@ def _paid_functions(crawler: dict) -> list[dict]:
     return out
 
 
+@structured
 def get_scraper_details_impl(client: LobstrClient, scraper: str, full: bool = False) -> dict:
     scraper = resolve_crawler_id(client, scraper)
     crawler = client.get_crawler(scraper)

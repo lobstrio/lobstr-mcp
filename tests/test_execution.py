@@ -1085,3 +1085,11 @@ def test_get_results_skips_task_index_without_the_scopes():
                                                                           {"id": "tb", "params": {}}]}}
     out = get_results_impl(routed_client(routes), squid_id="sq1", task_index=False)
     assert "tasks" not in out
+
+
+def test_get_run_unknown_run_is_a_clean_not_found():
+    def gone(request, body):
+        return httpx.Response(404, json={"errors": {"message": "The specified run does not exist.",
+                                                     "type": "HTTPNotFound", "code": 404}})
+    out = get_run_impl(routed_client({("GET", "/v1/runs/bad/stats"): gone, ("GET", "/v1/runs/bad"): gone}), "bad")
+    assert out["error_code"] == "not_found"

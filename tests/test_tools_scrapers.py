@@ -364,3 +364,13 @@ def test_details_accepts_an_id_without_listing_the_catalog():
     })
     out = get_scraper_details_impl(client, cid)
     assert out["id"] == cid
+
+
+def test_details_unknown_scraper_is_a_clean_not_found():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v1/crawlers":
+            return httpx.Response(200, json=CRAWLERS)
+        return httpx.Response(404, json={"errors": {"type": "HTTPNotFound", "message": "not found", "code": 404}})
+    client = LobstrClient("https://api.lobstr.io/v1", "t", transport=httpx.MockTransport(handler))
+    out = get_scraper_details_impl(client, "no-such-scraper")
+    assert out["error_code"] == "not_found"
