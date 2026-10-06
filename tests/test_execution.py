@@ -616,6 +616,8 @@ def _paged_api_client(all_rows, seen_page_sizes=None):
     was asked for) — the shape needed to catch get_results_impl truncating a
     page the caller asked to be bigger."""
     def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path != "/v1/results":  # the run / task lookups behind the task index
+            return httpx.Response(404, json={"errors": {"type": "HTTPNotFound", "message": "nf"}})
         page_size = int(request.url.params.get("page_size", 10))
         page = int(request.url.params.get("page", 1))
         if seen_page_sizes is not None:
@@ -1056,3 +1058,38 @@ def test_run_scraper_settings_only_input_keeps_saved_settings():
     run_scraper_impl(routed_client(routes), SETTINGS, IdempotencyStore(),
                      confirm=True, squid_id="sq1", input={"max_results": 20})
     assert bodies[0]["params"] == {"language": "en", "max_results": 20}
+
+
+def test_get_results_lists_tasks_and_filters_by_task():
+    seen = {}
+
+    def results(request, body):
+        seen["task"] = request.url.params.get("task")
+        return httpx.Response(200, json={"total_results": 1, "page": 1, "total_pages": 1,
+                                         "data": [{"title": "t"}]})
+    routes = {("GET", "/v1/results"): results,
+              ("GET", "/v1/tasks"): {"total_pages": 1, "page": 1, "data": [{"id": "ta", "params": {"keyword": "a"}},
+                                              {"id": "tb", "params": {"keyword": "b"}}]}}
+    out = get_results_impl(routed_client(routes), squid_id="sq1")
+    assert out["tasks"] == [{"task_id": "ta", "input": {"keyword": "a"}},
+                            {"task_id": "tb", "input": {"keyword": "b"}}]
+    out = get_results_impl(routed_client(routes), squid_id="sq1", task_id="tb")
+    assert seen["task"] == "tb" and "tasks" not in out
+    out = get_results_impl(routed_client(routes), task_id="tb")
+    assert out["error_code"] == "invalid_request"
+
+
+def test_get_results_skips_task_index_without_the_scopes():
+    routes = {("GET", "/v1/results"): {"total_results": 1, "page": 1, "total_pages": 1, "data": [{"t": 1}]},
+              ("GET", "/v1/tasks"): {"total_pages": 1, "page": 1, "data": [{"id": "ta", "params": {}},
+                                                                          {"id": "tb", "params": {}}]}}
+    out = get_results_impl(routed_client(routes), squid_id="sq1", task_index=False)
+    assert "tasks" not in out
+
+
+def test_get_run_unknown_run_is_a_clean_not_found():
+    def gone(request, body):
+        return httpx.Response(404, json={"errors": {"message": "The specified run does not exist.",
+                                                     "type": "HTTPNotFound", "code": 404}})
+    out = get_run_impl(routed_client({("GET", "/v1/runs/bad/stats"): gone, ("GET", "/v1/runs/bad"): gone}), "bad")
+    assert out["error_code"] == "not_found"

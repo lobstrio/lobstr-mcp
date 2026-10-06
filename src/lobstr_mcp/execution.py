@@ -799,6 +799,7 @@ def _account_limit_out(client, squid_id: str | None) -> dict:
                         "shows lock_time), or attach another account with attach_account.")}
 
 
+@structured
 def get_run_impl(client, run_id: str, full: bool = False) -> dict:
     stats = client.get_run_stats(run_id)
     # /runs/{hash}/stats has progress but no status field, so deriving status
@@ -919,10 +920,12 @@ _MAX_PAGE_SIZE = 100
 def get_results_impl(client, *, run_id: str | None = None, squid_id: str | None = None,
                      page: int = 1, page_size: int | None = None,
                      fields: list[str] | None = None, full: bool = False,
-                     max_rows: int | None = None) -> dict:
+                     max_rows: int | None = None, task_id: str | None = None,
+                     task_index: bool = True) -> dict:
     if not run_id and not squid_id:
         return {"error_code": "invalid_request",
-                "message": "provide run_id or squid_id (exactly one)"}
+                "message": "provide run_id or squid_id (exactly one)"
+                           + ("; task_id narrows one of them, it can't be used alone" if task_id else "")}
 
     # page_size is what's sent to the API and what total_pages/next describe;
     # max_rows follows it (used to be fixed at 10/25 regardless of page_size).
@@ -933,7 +936,7 @@ def get_results_impl(client, *, run_id: str | None = None, squid_id: str | None 
 
     # Free-plan accounts are capped at 30 results (API's ExportLimitReached);
     # that propagates as a normal structured error, not caught here.
-    payload = client.get_results(run=run_id, squid=squid_id, page=page,
+    payload = client.get_results(run=run_id, squid=squid_id, task=task_id, page=page,
                                  page_size=effective_page_size)
 
     records: list = []
@@ -958,7 +961,30 @@ def get_results_impl(client, *, run_id: str | None = None, squid_id: str | None 
             "returned": len(capped),
             "available_fields": available_fields,
             "next": payload.get("next"),
-            "results": capped}
+            "results": capped,
+            **({} if task_id or page != 1 or not task_index else _task_index(client, run_id, squid_id))}
+
+
+_TASK_INDEX_CAP = 50
+
+
+def _task_index(client, run_id: str | None, squid_id: str | None) -> dict:
+    """Rows carry no keyword/task column, so a multi-task squid's results can't
+    be split per input. List each task's id and input once (page 1) so the
+    caller can re-query with task_id. Best effort: any failure adds nothing."""
+    try:
+        squid = squid_id or (client.get_run(run_id) or {}).get("squid")
+        tasks = client.list_tasks(squid) if squid else []
+    except Exception:  # an index the rows can live without; never fail the page for it
+        return {}
+    if not isinstance(tasks, list) or len(tasks) < 2:
+        return {}
+    out = {"tasks": [{"task_id": t.get("id"), "input": t.get("params")}
+                     for t in tasks[:_TASK_INDEX_CAP] if isinstance(t, dict)],
+           "tasks_hint": "rows don't say which task produced them; pass task_id to get one task's rows"}
+    if len(tasks) > _TASK_INDEX_CAP:
+        out["tasks_truncated"] = True
+    return out
 
 
 @structured

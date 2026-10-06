@@ -48,9 +48,19 @@ def resolve_crawler_id(client: LobstrClient, scraper: str) -> str:
     if scraper and _CRAWLER_ID.match(scraper):
         return scraper
     try:
-        for crawler in client.list_crawlers():
+        crawlers = client.list_crawlers()
+        for crawler in crawlers:
             if scraper in (crawler.get("slug"), crawler.get("id")):
                 return crawler.get("id") or scraper
+        # Short names: "reddit" -> "reddit-scraper", or the one slug it prefixes.
+        short = (scraper or "").strip().lower()
+        if short:
+            for crawler in crawlers:
+                if crawler.get("slug") == f"{short}-scraper":
+                    return crawler.get("id") or scraper
+            prefixed = [c for c in crawlers if (c.get("slug") or "").startswith(f"{short}-")]
+            if len(prefixed) == 1:
+                return prefixed[0].get("id") or scraper
     except Exception:
         pass
     return scraper

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from lobstr_mcp.auth.scopes import EXECUTE_SCOPES, RESULTS_READ_SCOPES, RUN_READ_SCOPES
+from lobstr_mcp.auth.scopes import EXECUTE_SCOPES, READ_SCOPES, RESULTS_READ_SCOPES, RUN_READ_SCOPES
 from lobstr_mcp.execution import (
     abort_run_impl,
     get_results_impl,
@@ -18,6 +18,13 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
     def authz(scopes):
         if authorizer:
             authorizer(scopes)
+
+    def _granted(scopes) -> bool:
+        try:
+            authz(scopes)
+            return True
+        except Exception:
+            return False
 
     @mcp.tool(annotations={"title": "Run Scraper",
                            "readOnlyHint": False,
@@ -178,7 +185,7 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
     def get_results(run_id: str | None = None, squid_id: str | None = None,
                     page: int = 1, page_size: int | None = None,
                     fields: list[str] | None = None, full: bool = False,
-                    toon: bool = False) -> dict:
+                    toon: bool = False, task_id: str | None = None) -> dict:
         """Retrieve one page of results for a run or squid. Returns JSON; pass
         toon=true for compact TOON (fewer tokens). `page_size` (default 10, 25
         when full=true, capped at 100) is the number of rows fetched AND
@@ -189,12 +196,20 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
         every field (including empty ones) and a bigger default page. Provide
         exactly one of run_id or squid_id.
 
+        Rows don't say which task (keyword, URL...) produced them. When the
+        squid has several tasks, page 1 also lists `tasks` (task_id + input);
+        pass `task_id` with the same run_id/squid_id to get one task's rows.
+
         Free-plan accounts are capped at the first 30 results by the API; past
         that this returns `export_limit_reached` rather than more rows —
         upgrading the plan is the only fix, not a different page_size."""
         authz(RESULTS_READ_SCOPES)
+        # The task index reads the squid's inputs (crawlers:read) and, from a
+        # run_id, the run (runs:read): only list it when the token holds those too.
+        index_scopes = READ_SCOPES + (RUN_READ_SCOPES if run_id and not squid_id else [])
         out = get_results_impl(client_factory(), run_id=run_id, squid_id=squid_id,
-                               page=page, page_size=page_size, fields=fields, full=full)
+                               page=page, page_size=page_size, fields=fields, full=full,
+                               task_id=task_id, task_index=_granted(index_scopes))
         return toon_result(out) if toon else out
 
     @mcp.tool(annotations={"title": "List Runs", "readOnlyHint": True,

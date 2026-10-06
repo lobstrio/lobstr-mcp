@@ -5,6 +5,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 [Semantic Versioning](https://semver.org/) and are pre-1.0, so a minor bump may change behaviour.
 The number lives in `pyproject.toml` and is read through `lobstr_mcp.__version__`.
 
+## [0.6.0] - 2026-10-06
+
+### Added
+
+- `get_results(task_id=...)`: one task's rows, with `run_id` or `squid_id`. Page 1 of a squid with several
+  tasks lists `tasks` (task id + input) when the token can also read scrapers (and runs, for a `run_id`).
+- `get_scraper_details` on the LinkedIn Search Scraper notes that `location` and `industry` take LinkedIn
+  ids: paste a filtered linkedin.com search URL instead.
+
+### Fixed
+
+- `search_scrapers` matches a query word's singular ("linkedin emails" finds the Email scraper) and lists
+  the Sales Navigator scrapers under "linkedin".
+- Short scraper names resolve: `reddit` → `reddit-scraper`, or the one slug a name prefixes.
+- `get_scraper_details` and `get_run` return `error_code: not_found` for an unknown scraper or run instead
+  of failing the call.
+
 ## [0.5.1] - 2026-09-24
 
 ### Fixed
