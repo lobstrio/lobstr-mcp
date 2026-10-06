@@ -23,6 +23,41 @@ def test_resolve_crawler_id_id_passthrough_slug_and_miss():
     assert resolve_crawler_id(C(), "my-slug") == cid     # slug -> id
     assert resolve_crawler_id(C(), "no-such") == "no-such"  # miss -> passthrough
 
+
+def test_resolve_crawler_id_short_names():
+    crawlers = [{"id": "r" * 32, "slug": "reddit-scraper"},
+                {"id": "t" * 32, "slug": "tiktok-profile-scraper"},
+                {"id": "u" * 32, "slug": "tiktok-hashtag-scraper"},
+                {"id": "y" * 32, "slug": "yelp-reviews"}]
+
+    class C:
+        def list_crawlers(self):
+            return crawlers
+
+    assert resolve_crawler_id(C(), "reddit") == "r" * 32     # <name>-scraper
+    assert resolve_crawler_id(C(), "Reddit ") == "r" * 32
+    assert resolve_crawler_id(C(), "yelp") == "y" * 32       # unique prefix
+    assert resolve_crawler_id(C(), "tiktok") == "tiktok"     # ambiguous -> passthrough
+
+
+def test_search_matches_plural_query_words():
+    crawlers = [{"id": "nl", "name": "LinkedIn Profile & Email Scraper (No Login)",
+                 "description": "Scrape a LinkedIn profile", "slug": "linkedin-profile-email-scraper-no-login"},
+                {"id": "lp", "name": "Linkedin Profile Scraper", "description": "profile data",
+                 "slug": "linkedin-profile-scraper"}]
+    out = search_scrapers_impl(client_for({"/v1/crawlers": crawlers}), "linkedin emails")
+    assert [r["id"] for r in out["results"]] == ["nl"]
+
+
+def test_search_linkedin_finds_sales_navigator():
+    crawlers = [{"id": "sn", "name": "Sales Navigator Leads Scraper",
+                 "description": "Give us your Sales Navigator Leads search URL", "slug": "sales-navigator-leads-scraper"},
+                {"id": "sp", "name": "Sales Navigator Profile Scraper",
+                 "description": "Collect profiles", "slug": "sales-nav-profile-scraper"},
+                {"id": "gm", "name": "Google Maps", "description": "businesses", "slug": "google-maps"}]
+    out = search_scrapers_impl(client_for({"/v1/crawlers": crawlers}), "linkedin")
+    assert sorted(r["id"] for r in out["results"]) == ["sn", "sp"]
+
 # Field names follow a live GET /crawlers item (see LIVE_CRAWLER below).
 CRAWLERS = [
     {"id": "gm", "name": "Google Maps", "description": "Scrape businesses",
@@ -124,6 +159,13 @@ def test_details_notes_the_zip_code_behavior_for_google_maps():
     out = get_scraper_details_impl(client, "gm")
     assert "ZIP/postal code" in out["note"]
     assert "city" in out["note"]
+
+
+def test_details_notes_linkedin_geo_ids():
+    crawler = {**CRAWLER_GM, "slug": "linkedin-search-scraper"}
+    client = client_for({"/v1/crawlers/gm": crawler, "/v1/crawlers/gm/params": {}})
+    out = get_scraper_details_impl(client, "gm")
+    assert "numeric ids" in out["note"] and "URL" in out["note"]
 
 
 def test_details_has_no_note_for_an_unrelated_crawler():

@@ -62,9 +62,30 @@ def _tokenize(text: str) -> list[str]:
             if t not in _STOPWORDS and len(t) > 1]
 
 
+# Words a crawler is known by that its own text never says: the Sales
+# Navigator scrapers are LinkedIn's, but their names and descriptions only say
+# "Sales Navigator", so "linkedin" missed them.
+_IMPLIED_WORDS = (("sales navigator", "linkedin"), ("sales-nav", "linkedin"))
+
+
+def _search_blob(c: dict) -> str:
+    blob = f"{c.get('name','')} {c.get('description','')} {c.get('slug','')}".lower()
+    extra = [word for phrase, word in _IMPLIED_WORDS if phrase in blob and word not in blob]
+    return " ".join([blob, *extra])
+
+
+def _word_variants(token: str) -> list[str]:
+    """A query word plus its singular, so "emails" finds "Email"."""
+    out = [token]
+    if len(token) > 4 and token.endswith("es"):
+        out.append(token[:-2])
+    if len(token) > 3 and token.endswith("s"):
+        out.append(token[:-1])
+    return out
+
+
 def _crawler_tokens(c: dict) -> list[str]:
-    blob = f"{c.get('name','')} {c.get('description','')} {c.get('slug','')}"
-    return _tokenize(blob)
+    return _tokenize(_search_blob(c))
 
 
 def _bm25_scores(query_tokens: list[str], docs_tokens: list[list[str]]) -> list[float]:
@@ -175,9 +196,9 @@ def search_scrapers_impl(client: LobstrClient, query: str, full: bool = False) -
     tokens = (query or "").strip().lower().split()
 
     def matches(c: dict) -> bool:
-        blob = f"{c.get('name','')} {c.get('description','')} {c.get('slug','')}".lower()
-        # no query -> everything matches (a browse); otherwise every word must appear
-        return all(tok in blob for tok in tokens)
+        blob = _search_blob(c)
+        # no query -> everything matches (a browse); otherwise every word (or its singular) must appear
+        return all(any(v in blob for v in _word_variants(tok)) for tok in tokens)
 
     if full:
         ranked = sorted(crawlers, key=lambda c: (0 if tokens and matches(c) else 1))
@@ -221,6 +242,9 @@ def _strip_examples(schema: dict) -> dict:
 # Crawlers whose task-level `city` accepts a ZIP/postal code and returns
 # results from the surrounding area, not city limits.
 _ZIP_CODE_SEARCHES_NEARBY_SLUGS = {"google-maps-leads-scraper"}
+
+# Crawlers whose location/industry filters are LinkedIn numeric geo/industry ids.
+_GEO_ID_SLUGS = {"linkedin-search-scraper"}
 
 
 @structured
@@ -306,6 +330,10 @@ def get_scraper_details_impl(client: LobstrClient, scraper: str, full: bool = Fa
     if crawler.get("slug") in _ZIP_CODE_SEARCHES_NEARBY_SLUGS:
         result["note"] = ("A ZIP/postal code in `city` returns nearby towns too, not just "
                           "that one — filter on the `city` output field for city limits only.")
+    elif crawler.get("slug") in _GEO_ID_SLUGS:
+        result["note"] = ("`location` and `industry` take LinkedIn's numeric ids, which no tool here "
+                          "can look up. Ask the user to run the search on linkedin.com with those "
+                          "filters and paste the result URL as the task: filters in the URL are kept.")
     return result
 
 
