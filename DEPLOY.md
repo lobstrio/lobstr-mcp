@@ -105,10 +105,8 @@ curl -s -X POST https://api.lobstr.io/v1/oauth/mcp-grant/redeem \
   -H "X-MCP-Service-Credential: $MCP_SERVICE_CREDENTIAL" -d '{"grant":"bogus"}'
 ```
 
-Post-deploy smoke (no account needed): `GET /` → 200 HTML (the public landing
-page) and `GET /lobstr/assets/lobstr-wordmark.svg` → 200 `image/svg+xml` (brand
-assets; the same catch-all `location /` that proxies `/mcp` serves these — no
-extra nginx block); `POST /mcp` → 401 + `WWW-Authenticate`;
+Post-deploy smoke (no account needed): `GET /` → 301 to
+`https://docs.lobstr.io/docs/mcp` (no landing page since 20/10/2026); `POST /mcp` → 401 + `WWW-Authenticate`;
 `/.well-known/oauth-protected-resource/mcp` and
 `/.well-known/oauth-authorization-server` → 200 with the `https://mcp.lobstr.io/`
 issuer; `POST /register` → 201; `GET /authorize?…` → 302 to

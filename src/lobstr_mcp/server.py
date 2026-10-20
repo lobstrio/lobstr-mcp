@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 from fastmcp import FastMCP
 
@@ -21,52 +20,19 @@ from lobstr_mcp.tools.primitives import register_primitive_tools
 from lobstr_mcp.tools.scrapers import register_scraper_tools
 from lobstr_mcp.tools.user import register_user_tools
 
-# Public marketing page + brand assets live at the repo root (…/lobstr-mcp/assets).
-_ASSETS_DIR = Path(__file__).resolve().parents[2] / "assets"
-# Only these paths are servable — the membership check is the path-traversal guard.
-_ASSET_WHITELIST = {
-    "lobstr-wordmark.svg",
-    "logo-red.svg",
-    "fonts/segoeui.woff2",
-    "fonts/segoeuisb.woff2",
-    "fonts/segoeuib.woff2",
-    "fonts/segoeuibl.woff2",
-}
-_ASSET_MEDIA = {".woff2": "font/woff2", ".svg": "image/svg+xml"}
+# A browser opening mcp.lobstr.io lands on the MCP page of the docs (Sasha, 20/10: no page of its own).
+DOCS_URL = "https://docs.lobstr.io/docs/mcp"
 
 
 def register_web_pages(mcp) -> None:
-    """Serve the public landing page at / and its brand assets under
-    /lobstr/assets. Additive to the MCP protocol (still at /mcp) and the OAuth
-    routes — a browser hitting mcp.lobstr.io gets the marketing page, AI clients
-    keep talking to /mcp."""
+    """Send a browser hitting / to the MCP page of the docs. Additive to the MCP protocol (still at /mcp)
+    and the OAuth routes: AI clients keep talking to /mcp."""
     from starlette.requests import Request
-    from starlette.responses import HTMLResponse, PlainTextResponse, Response
-
-    try:
-        landing_html = (_ASSETS_DIR / "landing.html").read_text(encoding="utf-8")
-    except OSError:
-        logging.getLogger(__name__).warning(
-            "landing.html not found at %s; / will 404", _ASSETS_DIR)
-        return
+    from starlette.responses import RedirectResponse
 
     @mcp.custom_route("/", methods=["GET"])
     async def landing(request: Request):  # noqa: ARG001
-        return HTMLResponse(landing_html)
-
-    @mcp.custom_route("/lobstr/assets/{path:path}", methods=["GET"])
-    async def lobstr_asset(request: Request):
-        rel = request.path_params["path"]
-        if rel not in _ASSET_WHITELIST:
-            return PlainTextResponse("Not found", status_code=404)
-        f = _ASSETS_DIR / rel
-        if not f.is_file():
-            return PlainTextResponse("Not found", status_code=404)
-        return Response(
-            f.read_bytes(),
-            media_type=_ASSET_MEDIA.get(f.suffix, "application/octet-stream"),
-            headers={"Cache-Control": "public, max-age=86400"},
-        )
+        return RedirectResponse(DOCS_URL, status_code=301)
 
 
 def build_server(settings=None, client_factory=None) -> FastMCP:

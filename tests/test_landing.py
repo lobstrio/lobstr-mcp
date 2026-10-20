@@ -15,37 +15,13 @@ async def _get(app, path):
         return await c.get(path)
 
 
-def test_landing_page_served_at_root():
+def test_root_redirects_to_the_mcp_docs():
+    # No landing page of its own since 20/10: a browser on mcp.lobstr.io goes to the docs.
     r = asyncio.run(_get(_app(), "/"))
-    assert r.status_code == 200
-    assert "text/html" in r.headers["content-type"]
-    body = r.text
-    # The page must advertise the real, current endpoint and stay truthful about
-    # the tools it fronts — those strings double as a guard against drift.
-    assert "https://mcp.lobstr.io/mcp" in body
-    assert "run_scraper" in body and "search_scrapers" in body
+    assert r.status_code == 301
+    assert r.headers["location"] == "https://docs.lobstr.io/docs/mcp"
 
 
-def test_brand_assets_served_with_correct_media_type():
-    app = _app()
-    svg = asyncio.run(_get(app, "/lobstr/assets/lobstr-wordmark.svg"))
-    assert svg.status_code == 200
-    assert svg.headers["content-type"] == "image/svg+xml"
-
-    # the footer crab is the homepage's logo-red.svg — it must be servable
-    crab = asyncio.run(_get(app, "/lobstr/assets/logo-red.svg"))
-    assert crab.status_code == 200
-    assert crab.headers["content-type"] == "image/svg+xml"
-
-    font = asyncio.run(_get(app, "/lobstr/assets/fonts/segoeui.woff2"))
-    assert font.status_code == 200
-    assert font.headers["content-type"] == "font/woff2"
-
-
-def test_asset_route_rejects_traversal_and_unknown_paths():
-    app = _app()
-    for bad in ("/lobstr/assets/fonts/../../server.py",
-                "/lobstr/assets/nope.txt",
-                "/lobstr/assets/../pyproject.toml"):
-        r = asyncio.run(_get(app, bad))
-        assert r.status_code == 404, bad
+def test_brand_assets_are_gone():
+    r = asyncio.run(_get(_app(), "/lobstr/assets/lobstr-wordmark.svg"))
+    assert r.status_code == 404
