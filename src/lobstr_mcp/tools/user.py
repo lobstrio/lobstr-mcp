@@ -205,15 +205,15 @@ def register_user_tools(mcp, client_factory, authorizer=None) -> None:
         No lifetime total is reported. `credits_note` in the response repeats
         which case applies.
 
-        `used_slots` is the concurrency reserved by this account's ACTIVE
-        scrapers (the sum of their concurrency), `total_slots` what the plan
-        allows. The cap is checked when a scraper is created, activated or has
-        its concurrency raised — never when a run starts. So the pair can read
-        over itself (`used_slots: 608` against `total_slots: 1`) after a plan
-        change or on a staff account, which skips the check; that on its own is
-        not an error, and the scrapers that already exist keep running. When the
-        check does apply and the cap is reached, it is the create or activate
-        call that fails and says so.
+        `used_slots` is the concurrency of this account's runs in progress
+        (PENDING or RUNNING, on active scrapers), `total_slots` what the plan
+        allows. Scrapers at rest use no slot. The cap is checked when a run
+        starts: a launch that would go past it fails with
+        `slots_limit_exceeded` and nothing is queued, so retry when a run
+        finishes or stop one. Creating scrapers uses no slot: the plan holds up
+        to `max_squids` of them (100 per slot) and `squids` is how many exist;
+        past it, creating fails with `squids_limit_exceeded`. Staff accounts
+        skip both checks, so their `used_slots` can read above `total_slots`.
 
         Returns JSON; pass toon=true for compact TOON.
         """

@@ -69,8 +69,8 @@ def _remediation_tail(squid_id: str) -> str:
         "function-level params go under a \"functions\" key in config, never flat; "
         "task-level fields don't belong in config at all, add them with add_tasks) — then, "
         f"once you've confirmed squid_id='{squid_id}' isn't needed, call "
-        f"deactivate_scraper(squid_id='{squid_id}') so the half-built one isn't left holding "
-        "a concurrency slot for nothing. To fix and reuse this same squid instead, call "
+        f"deactivate_scraper(squid_id='{squid_id}') so the half-built one isn't left "
+        "behind for nothing. To fix and reuse this same squid instead, call "
         f"run_scraper(squid_id='{squid_id}', input=<the crawler's full input: its task-level "
         "fields together with the corrected squid- and function-level ones, all FLAT — unlike "
         "`config`, run_scraper's `input` takes no nesting, it classifies each key by level and "
@@ -123,7 +123,7 @@ def _config_apply_unknown(squid_id: str, crawler_id: str, detail: str) -> dict:
     failure — see the call site). Unlike a rejection, the request may have
     reached the server and been applied; this client has no way to tell, so
     it must not claim "rejected" here — that overclaim would lead a caller to
-    build a duplicate under a new name and burn a slot for nothing when the
+    build a duplicate under a new name and leave it behind for nothing when the
     original squid was actually fine."""
     return {
         "squid_id": squid_id, "scraper": crawler_id, "error_code": "upstream_unavailable",
