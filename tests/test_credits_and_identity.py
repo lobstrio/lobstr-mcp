@@ -80,6 +80,13 @@ def test_check_credits_still_reports_the_same_four_numbers():
     assert (out["used_slots"], out["total_slots"]) == (608, 1)
 
 
+def test_check_credits_reports_the_squid_cap():
+    balance = dict(DAILY_BALANCE, used_slots=1, squids=12, max_squids=100)
+    out = check_credits_impl(client_for({"/v1/user/balance": balance}))
+    assert (out["squids"], out["max_squids"]) == (12, 100)
+    assert "runs in progress" in out["slots_note"]
+
+
 # --- `available` is an allowance, not what is left --------------------------
 # Measured on the test account: monthly available 3,000,000
 # beside consumed 125,000, and the same account on daily reports available
@@ -126,11 +133,13 @@ def test_the_unknown_interval_note_still_warns_about_the_allowance():
 # --- the slots pair, described as it behaves today --------------------------
 
 
-def test_slots_are_described_as_reserved_by_active_scrapers_not_as_running_runs():
+def test_slots_are_described_as_runs_in_progress_checked_at_launch():
+    # Since 2026-11-02 (matrix_apis slots.py) a slot is a worker of a run in progress.
     out = check_credits_impl(client_for({"/v1/user/balance": DAILY_BALANCE}))
     note = out["slots_note"]
-    assert "ACTIVE scrapers" in note
-    assert "never when a run starts" in note
+    assert "runs in progress" in note
+    assert "scrapers at rest use none" in note
+    assert "nothing is queued" in note
 
 
 def test_a_slots_pair_over_its_own_cap_is_called_out_as_not_an_error():

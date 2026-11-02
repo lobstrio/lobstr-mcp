@@ -20,6 +20,13 @@ def test_message_is_always_present():
     assert to_error_dict(LobstrAPIError(500))["message"]
 
 
+def test_squids_limit_exceeded_says_delete_or_upgrade():
+    out = to_error_dict(LobstrAPIError(400, error_type="SquidsLimitExceeded",
+                                       message="Your plan holds up to 100 squids."))
+    assert out["error_code"] == "squids_limit_exceeded"
+    assert "Delete" in out["hint"]
+
+
 def test_slots_limit_exceeded_hints_deactivation():
     out = to_error_dict(LobstrAPIError(400, error_type="SlotsLimitExceeded",
                                        message="no free slots"))

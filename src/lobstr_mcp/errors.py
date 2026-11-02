@@ -50,9 +50,14 @@ _TYPE_CODES: dict[str, tuple[str, str]] = {
     "NotEnoughCredits": ("insufficient_credits", "Top up credits and retry."),
     "SlotsLimitExceeded": (
         "slots_limit_exceeded",
-        "You've hit your concurrency-slot limit. Free a slot by deactivating a "
-        "scraper you're not using (deactivate_scraper) — that keeps its config "
-        "and results, unlike deleting — then retry.",
+        "The account's runs in progress use all of its plan's slots, and nothing "
+        "is queued. Retry when a run finishes, or stop one by deactivating its "
+        "scraper (deactivate_scraper keeps its config and results, unlike deleting).",
+    ),
+    "SquidsLimitExceeded": (
+        "squids_limit_exceeded",
+        "The plan holds up to 100 scrapers per slot. Delete scrapers that are no "
+        "longer needed, or upgrade the plan, then retry.",
     ),
     "ExportLimitReached": (
         "export_limit_reached",

@@ -16,7 +16,8 @@ idempotency short-circuit) are **flags, not errors** — see
 | `validation_error` | Input failed schema validation. `errors` lists per-field messages. |
 | `invalid_request` | Bad tool arguments (e.g. neither `run_id` nor `squid_id`, or an empty `tasks` list). |
 | `insufficient_credits` | The API refused the run for credits (`NotEnoughCredits`) — an ordinary account whose period spend reached its allowance. A staff/admin account runs regardless. |
-| `slots_limit_exceeded` | The account's concurrency-slot limit is reached (checked on squid create/activate, not run start). Free one with `deactivate_scraper` on a squid you're not using. |
+| `slots_limit_exceeded` | The account's runs in progress use all of the plan's slots (checked when a run starts; nothing is queued). Retry when a run finishes, or stop one with `deactivate_scraper`. |
+| `squids_limit_exceeded` | The plan holds up to 100 scrapers per slot. Delete scrapers you no longer need, or upgrade. |
 | `unauthorized` | Token invalid, expired, or an OAuth grant already consumed — re-authorize. |
 | `forbidden` | Authenticated but not permitted. |
 | `not_found` | No such run / squid / scraper for a generic lookup. |

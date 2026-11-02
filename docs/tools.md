@@ -136,11 +136,11 @@ reused with new inputs. Does not delete the scraper.
 ### `deactivate_scraper(squid_id)`
 Scope: `runs:execute`.
 
-Deactivates a squid to free the concurrency slot it holds while active
-(checked when a squid is created, activated, or has its concurrency raised —
-not when a run starts), **without deleting it** — config and results stay,
-and it can be reactivated from the dashboard. Stops any run of that squid
-currently in progress. Prefer this over deleting a squid you might reuse.
+Deactivates a squid **without deleting it**: stops its schedule and any run
+of that squid in progress, which frees the slots that run used (since
+2026-11-02 only runs in progress use slots; a squid at rest uses none). Config
+and results stay, and it can be reactivated from the dashboard. Prefer this
+over deleting a squid you might reuse.
 
 ## Runs and results
 
@@ -204,8 +204,9 @@ The only tool that reports credits. Budget a run against `remaining`
 (`available - consumed`), not `available`. What period the figures cover
 depends on `interval` (`"daily"` = today only; anything else = the current
 billing period) — `credits_note` in the response says which applies. Also
-reports `used_slots` / `total_slots` (see `deactivate_scraper` above for what
-a slot is).
+reports `used_slots` / `total_slots` (the slots of the runs in progress, out of
+the plan's; a launch past them is refused) and `squids` / `max_squids` (the
+plan holds 100 scrapers per slot).
 
 ### `whoami()`
 Scope: `profile:read`.

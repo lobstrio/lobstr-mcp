@@ -53,15 +53,16 @@ _REMAINING_NOTE = (
 )
 
 _SLOTS_NOTE = (
-    "used_slots is the concurrency reserved by this account's ACTIVE scrapers "
-    "(the sum of their concurrency, recomputed on every call); total_slots is "
-    "what the plan allows. The cap is checked only when a scraper is created, "
-    "activated or has its concurrency raised — never when a run starts."
+    "used_slots is the concurrency of this account's runs in progress (PENDING or "
+    "RUNNING); scrapers at rest use none. total_slots is what the plan allows: a "
+    "launch that would go past it is refused (slots_limit_exceeded) and nothing is "
+    "queued. Creating scrapers uses no slot: the plan holds up to max_squids of "
+    "them (100 per slot), squids is how many exist."
 )
 _SLOTS_OVER_NOTE = (
-    " used_slots is above total_slots here, which happens after a plan change "
-    "and on staff accounts, which skip the check; on its own it is not an error "
-    "and it does not stop the scrapers that already exist from running."
+    " used_slots is above total_slots here, which happens when runs overlapped "
+    "around a plan change and on staff accounts, which skip the check; on its own "
+    "it is not an error."
 )
 
 
@@ -128,6 +129,8 @@ def check_credits_impl(client: LobstrClient) -> dict:
         "credits_note": _credits_note(interval),
         "used_slots": used_slots,
         "total_slots": total_slots,
+        "squids": b.get("squids"),
+        "max_squids": b.get("max_squids"),
         "slots_note": _slots_note(used_slots, total_slots),
     }
 

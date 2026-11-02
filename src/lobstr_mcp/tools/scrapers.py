@@ -445,13 +445,14 @@ def empty_scraper_impl(client: LobstrClient, squid_id: str) -> dict:
 
 @structured(verify_with="get_my_scraper(squid_id=...) and its `is_active`")
 def deactivate_scraper_impl(client: LobstrClient, squid_id: str) -> dict:
-    """Deactivate a squid to free its concurrency slot, keeping its config +
-    results (unlike deleting). Reversible via the dashboard."""
+    """Deactivate a squid: stops its schedule and any run in progress (freeing the
+    slots that run used), keeping its config + results (unlike deleting).
+    Reversible via the dashboard."""
     client.set_squid_active(squid_id, False)
     return {"squid_id": squid_id, "is_active": False, "status": "deactivated",
-            "message": "Scraper deactivated — its concurrency slot is now free, and it keeps all "
-                       "its configuration and results (unlike deleting). Any in-progress run was "
-                       "stopped. Reactivate it from your lobstr.io dashboard to run it again."}
+            "message": "Scraper deactivated — any in-progress run was stopped and its slots are "
+                       "free, and it keeps all its configuration and results (unlike deleting). "
+                       "Reactivate it from your lobstr.io dashboard to run it again."}
 
 
 def register_scraper_tools(mcp, client_factory, authorizer=None) -> None:
@@ -547,15 +548,16 @@ def register_scraper_tools(mcp, client_factory, authorizer=None) -> None:
 
     @mcp.tool(annotations={"title": "Deactivate My Scraper",
                            "readOnlyHint": False,
-                           # Frees a slot and stops any in-flight run, but keeps
+                           # Stops any in-flight run (freeing its slots), but keeps
                            # the squid + its data — reversible, not a delete.
                            "destructiveHint": False,
                            "idempotentHint": True, "openWorldHint": True})
     def deactivate_scraper(squid_id: str) -> dict:
-        """Deactivate one of the user's scrapers (a squid) to free its concurrency
-        slot, WITHOUT deleting it — the squid keeps its configuration and results
-        and can be reactivated later from the dashboard. Prefer this over deleting
-        a scraper you might reuse (deleting loses its data). Note: deactivating
-        stops any run currently in progress."""
+        """Deactivate one of the user's scrapers (a squid) WITHOUT deleting it: stops
+        its schedule and any run in progress, which frees the slots that run used
+        (only runs in progress use slots; scrapers at rest use none). The squid keeps
+        its configuration and results and can be reactivated later from the
+        dashboard. Prefer this over deleting a scraper you might reuse (deleting
+        loses its data)."""
         authz(EXECUTE_SCOPES)
         return deactivate_scraper_impl(client_factory(), squid_id)

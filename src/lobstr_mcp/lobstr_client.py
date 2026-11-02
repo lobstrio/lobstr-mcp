@@ -201,8 +201,8 @@ class LobstrClient:
             return self._sdk.squids.empty(squid_hash)
 
     def set_squid_active(self, squid_hash: str, active: bool) -> dict:
-        # POST /squids/{id} with is_active toggles activation; the API frees the
-        # concurrency slot (reset_slots) on deactivate. Pass-through so the flag
+        # POST /squids/{id} with is_active toggles activation; deactivating aborts
+        # the squid's run in progress, which frees its slots. Pass-through so the flag
         # reaches the API (the SDK's typed update() whitelists other keys).
         with _as_lobstr_error(f"/squids/{squid_hash}"):
             return self._llhttp.post(f"/squids/{squid_hash}", json={"is_active": active})

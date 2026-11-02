@@ -71,7 +71,7 @@ sequence: [`docs/tools.md`](docs/tools.md), [`docs/errors.md`](docs/errors.md).
 | `run_scraper` | Configure and run a scraper in one call — **spends credits** |
 | `attach_account` | Link a connected platform account to a scraper |
 | `empty_scraper` | Clear a scraper's saved inputs, keep its config |
-| `deactivate_scraper` | Free a scraper's concurrency slot without deleting it |
+| `deactivate_scraper` | Stop a scraper's schedule and run in progress without deleting it |
 | `get_run` | Status and progress of a run |
 | `wait_for_run` | Wait for a run to finish, up to 50 s per call |
 | `list_runs` | Recent runs for a scraper |
@@ -80,7 +80,7 @@ sequence: [`docs/tools.md`](docs/tools.md), [`docs/errors.md`](docs/errors.md).
 | `abort_run` | Stop a running job |
 | `list_accounts` | The user's connected platform accounts |
 | `get_account` | One connected account by id |
-| `check_credits` | Credit balance and concurrency slots |
+| `check_credits` | Credit balance, slots in use and the scraper cap |
 | `whoami` | The authenticated user and server version |
 
 ## Self-hosting

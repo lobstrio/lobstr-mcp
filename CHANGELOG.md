@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); ver
 [Semantic Versioning](https://semver.org/) and are pre-1.0, so a minor bump may change behaviour.
 The number lives in `pyproject.toml` and is read through `lobstr_mcp.__version__`.
 
+## [Unreleased]
+
+### Changed
+
+- Slots follow the API's new rule (2026-11-02): only runs in progress use them, a launch past the
+  plan's slots is refused (`slots_limit_exceeded`, nothing queued), and a plan holds up to 100
+  scrapers per slot (`squids_limit_exceeded`, new). `check_credits` returns `squids` and
+  `max_squids`, and its `slots_note`, the error hints and `deactivate_scraper`'s description say so.
+
 ## [0.6.0] - 2026-10-06
 
 ### Added
