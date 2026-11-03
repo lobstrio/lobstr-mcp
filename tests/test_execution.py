@@ -385,19 +385,6 @@ def test_get_results_caps_and_selects_fields():
     assert out["total_results"] == 5
 
 
-def test_get_results_surfaces_free_plan_export_limit_cleanly():
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(400, json={"errors": {
-            "message": "You have reached the free plan limit of 30 results. "
-                       "Upgrade to a premium plan to access more results.",
-            "type": "ExportLimitReached", "code": 400}})
-    client = LobstrClient("https://api.lobstr.io/v1", "t",
-                          transport=httpx.MockTransport(handler))
-    out = get_results_impl(client, run_id="run1", page=4)
-    assert out["error_code"] == "export_limit_reached"
-    assert out["upstream_status"] == 400
-    assert "30 results" in out["message"]
-
 
 def test_get_results_requires_run_or_squid():
     client = routed_client({})

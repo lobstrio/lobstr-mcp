@@ -59,11 +59,6 @@ _TYPE_CODES: dict[str, tuple[str, str]] = {
         "The plan holds up to 100 scrapers per slot. Delete scrapers that are no "
         "longer needed, or upgrade the plan, then retry.",
     ),
-    "ExportLimitReached": (
-        "export_limit_reached",
-        "Free-plan accounts can only read the first 30 results of a run. "
-        "Upgrading the plan is the only way past this.",
-    ),
 }
 
 _STATUS_CODES: dict[int, str] = {

@@ -199,10 +199,8 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
         Rows don't say which task (keyword, URL...) produced them. When the
         squid has several tasks, page 1 also lists `tasks` (task_id + input);
         pass `task_id` with the same run_id/squid_id to get one task's rows.
-
-        Free-plan accounts are capped at the first 30 results by the API; past
-        that this returns `export_limit_reached` rather than more rows —
-        upgrading the plan is the only fix, not a different page_size."""
+        Every plan, the free one included, reads every result (no row cap
+        since 2026-11-03)."""
         authz(RESULTS_READ_SCOPES)
         # The task index reads the squid's inputs (crawlers:read) and, from a
         # run_id, the run (runs:read): only list it when the token holds those too.

@@ -934,8 +934,6 @@ def get_results_impl(client, *, run_id: str | None = None, squid_id: str | None 
     effective_page_size = max(1, min(effective_page_size, _MAX_PAGE_SIZE))
     max_rows = effective_page_size if max_rows is None else min(max_rows, effective_page_size)
 
-    # Free-plan accounts are capped at 30 results (API's ExportLimitReached);
-    # that propagates as a normal structured error, not caught here.
     payload = client.get_results(run=run_id, squid=squid_id, task=task_id, page=page,
                                  page_size=effective_page_size)
 

@@ -7,6 +7,11 @@ The number lives in `pyproject.toml` and is read through `lobstr_mcp.__version__
 
 ## [Unreleased]
 
+### Removed
+
+- The `export_limit_reached` error and the 30-row note on `get_results`: since 2026-11-03 the free plan reads
+  every result.
+
 ### Changed
 
 - Slots follow the API's new rule (2026-11-02): only runs in progress use them, a launch past the
