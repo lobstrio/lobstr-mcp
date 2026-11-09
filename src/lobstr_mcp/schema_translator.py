@@ -38,7 +38,10 @@ def _input_modes(items: list[dict]) -> dict | None:
         if not group and "default" in it:
             continue
         if group:
-            groups.setdefault(group, []).append(name)
+            # an input can belong to several groups: Google Maps `category` is
+            # in "location" (with country + city) and in "area" (with area_id)
+            for g in (group if isinstance(group, (list, tuple)) else [group]):
+                groups.setdefault(g, []).append(name)
         else:
             always.append(name)
 
