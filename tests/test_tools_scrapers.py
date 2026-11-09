@@ -353,6 +353,19 @@ def test_details_surfaces_input_modes_from_groups():
     assert out["input_schema"]["required"] == ["language"]  # only always-required, not the alternatives
 
 
+def test_an_input_in_several_groups_appears_in_each_mode():
+    crawler = {"id": "gm", "name": "GM", "result": ["title"], "input": [
+        {"name": "url", "type": "string", "level": "task", "required": True, "group": "url"},
+        {"name": "category", "type": "string", "level": "task", "required": True, "group": ["location", "area"]},
+        {"name": "country", "type": "string", "level": "task", "required": True, "group": "location"},
+        {"name": "city", "type": "string", "level": "task", "required": True, "group": "location"},
+        {"name": "area_id", "type": "int", "level": "task", "required": True, "group": "area"}]}
+    client = client_for({"/v1/crawlers/gm": crawler, "/v1/crawlers/gm/params": {}})
+    out = get_scraper_details_impl(client, "gm")
+    assert out["input_modes"]["either"] == [["url"], ["category", "country", "city"], ["category", "area_id"]]
+    assert "(category + area_id)" in out["input_modes"]["description"]
+
+
 def test_details_accepts_an_id_without_listing_the_catalog():
     cid = "b" * 32  # a 32-hex id resolves directly; no /v1/crawlers list route needed
     client = client_for({
