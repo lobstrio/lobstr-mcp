@@ -9,6 +9,8 @@ The number lives in `pyproject.toml` and is read through `lobstr_mcp.__version__
 
 ### Added
 
+- `get_scraper_details` notes, for the Leboncoin search crawlers, to run the search on leboncoin.fr and paste
+  its URL: a filter written by hand that Leboncoin doesn't know matches nothing (`no_results_found`).
 - `create_squid` and `update_scraper` take a `webhook` (`url`, `events`, `retry`, `is_active`), saved through
   `POST /v1/delivery`. A webhook passed inside `config` (as `webhook` or `webhook_fields`) is lifted out of
   the crawler params, like `concurrency`; sent there, the API refused it as an invalid parameter.

@@ -168,6 +168,14 @@ def test_details_notes_linkedin_geo_ids():
     assert "numeric ids" in out["note"] and "URL" in out["note"]
 
 
+def test_details_notes_leboncoin_search_urls():
+    for slug in ("leboncoin-iter-listings", "leboncoin-iter-listings-with-phone"):
+        crawler = {**CRAWLER_GM, "slug": slug}
+        client = client_for({"/v1/crawlers/gm": crawler, "/v1/crawlers/gm/params": {}})
+        out = get_scraper_details_impl(client, "gm")
+        assert "leboncoin.fr" in out["note"] and "urgent=1" in out["note"]
+
+
 def test_details_has_no_note_for_an_unrelated_crawler():
     client = client_for({"/v1/crawlers/gm": CRAWLER_GM, "/v1/crawlers/gm/params": {}})
     out = get_scraper_details_impl(client, "gm")

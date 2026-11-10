@@ -246,6 +246,12 @@ _ZIP_CODE_SEARCHES_NEARBY_SLUGS = {"google-maps-leads-scraper"}
 # Crawlers whose location/industry filters are LinkedIn numeric geo/industry ids.
 _GEO_ID_SLUGS = {"linkedin-search-scraper"}
 
+# Leboncoin search crawlers: the task is a leboncoin.fr search URL whose filters
+# are Leboncoin's own (fluxea.io, 09/11/2026: an agent wrote urgent=true and
+# brand=BMW, Leboncoin matched nothing on every run).
+_LEBONCOIN_SEARCH_SLUGS = {"leboncoin-iter-listings", "leboncoin-iter-listings-with-phone",
+                           "leboncoin-iter-store"}
+
 
 def _paid_functions(crawler: dict) -> list[dict]:
     """Add-ons billed on top of each row (LinkedIn email enrichment, Sales
@@ -334,6 +340,11 @@ def get_scraper_details_impl(client: LobstrClient, scraper: str, full: bool = Fa
         result["note"] = ("`location` and `industry` take LinkedIn's numeric ids, which no tool here "
                           "can look up. Ask the user to run the search on linkedin.com with those "
                           "filters and paste the result URL as the task: filters in the URL are kept.")
+    elif crawler.get("slug") in _LEBONCOIN_SEARCH_SLUGS:
+        result["note"] = ("Run the search on leboncoin.fr with its filters and paste that page's URL as "
+                          "the task. A filter written by hand that Leboncoin doesn't know (urgent=true for "
+                          "urgent=1, brand=BMW for u_car_brand=BMW) matches nothing: the task ends "
+                          "no_results_found.")
     return result
 
 
