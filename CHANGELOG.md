@@ -7,6 +7,12 @@ The number lives in `pyproject.toml` and is read through `lobstr_mcp.__version__
 
 ## [Unreleased]
 
+### Added
+
+- `create_squid` and `update_scraper` take a `webhook` (`url`, `events`, `retry`, `is_active`), saved through
+  `POST /v1/delivery`. A webhook passed inside `config` (as `webhook` or `webhook_fields`) is lifted out of
+  the crawler params, like `concurrency`; sent there, the API refused it as an invalid parameter.
+
 ### Removed
 
 - The `export_limit_reached` error and the 30-row note on `get_results`: since 2026-11-03 the free plan reads

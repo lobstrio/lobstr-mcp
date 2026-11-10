@@ -43,6 +43,83 @@ def _apply_wire_names(values: dict, wire_names: dict) -> dict:
     return out
 
 
+WEBHOOK_EVENTS = ("run.running", "run.paused", "run.done", "run.error")
+DEFAULT_WEBHOOK_EVENTS = ("run.done", "run.error")
+_WEBHOOK_KEYS = ("url", "events", "retry", "is_active")
+
+
+def _lift_webhook(cfg: dict, webhook):
+    """A webhook is a squid field, not a crawler setting: one passed inside
+    `config` (as `webhook`, or the API's own `webhook_fields`) is lifted out,
+    like `concurrency`. Sent inside params, the API refused it with "The
+    specified parameter webhook_fields is invalid." (fluxea.io, 09/11/2026)."""
+    for key in ("webhook", "webhook_fields"):
+        if key in cfg:
+            lifted = cfg.pop(key)
+            if webhook is None:
+                webhook = lifted
+    return webhook
+
+
+def _webhook_fields(webhook, saved=None) -> tuple[dict | None, list[str]]:
+    """(the API's webhook_fields, errors) for a `webhook` argument.
+
+    A key left out keeps the value of the webhook already saved on the squid
+    (`saved`, when it has a URL), else its default: events run.done and
+    run.error, retry on. `is_active` is true unless passed false."""
+    if not isinstance(webhook, dict):
+        return None, ['webhook must be an object, e.g. {"url": "https://example.com/hook", '
+                      '"events": ["run.done"]}']
+    errors = []
+    unknown = sorted(set(webhook) - set(_WEBHOOK_KEYS))
+    if unknown:
+        errors.append(f"unknown webhook key(s) {unknown}: use {', '.join(_WEBHOOK_KEYS)}")
+    saved = saved if isinstance(saved, dict) and saved.get("url") else {}
+
+    url = webhook.get("url") or saved.get("url")
+    if not isinstance(url, str) or not url.startswith(("https://", "http://")):
+        errors.append("webhook.url must be an http(s) URL")
+
+    events = webhook.get("events")
+    if events is None:
+        events = saved.get("events") or list(DEFAULT_WEBHOOK_EVENTS)
+    if isinstance(events, str):
+        events = [events]
+    if isinstance(events, dict):  # the API's own shape: {"run.done": true, ...}
+        bad = [e for e, on in events.items() if not isinstance(on, bool)]
+        if bad:
+            errors.append(f"webhook.events values must be true or false: {bad}")
+        unknown_events = [e for e in events if e not in WEBHOOK_EVENTS]
+        events = [e for e, on in events.items() if on is True]
+    elif isinstance(events, list):
+        unknown_events = [e for e in events if e not in WEBHOOK_EVENTS]
+    else:
+        unknown_events, events = [], []
+        errors.append("webhook.events must be a list of event names")
+    if unknown_events:
+        errors.append(f"unknown webhook event(s) {unknown_events}: use {', '.join(WEBHOOK_EVENTS)}")
+    elif not events and not any(e.startswith("webhook.events") for e in errors):
+        errors.append("webhook.events is empty: pick at least one of "
+                      f"{', '.join(WEBHOOK_EVENTS)}, or pass is_active false to turn it off")
+
+    retry = webhook.get("retry", saved.get("retry", True))
+    is_active = webhook.get("is_active", True)
+    for key, value in (("retry", retry), ("is_active", is_active)):
+        if not isinstance(value, bool):
+            errors.append(f"webhook.{key} must be true or false")
+    if errors:
+        return None, errors
+    return {"url": url, "is_active": is_active, "retry": retry,
+            "events": {e: e in events for e in WEBHOOK_EVENTS}}, []
+
+
+def _webhook_view(fields: dict) -> dict:
+    """A saved webhook as the tools show it: events as a list, like the input."""
+    events = fields.get("events") or {}
+    return {"url": fields.get("url"), "events": [e for e in WEBHOOK_EVENTS if events.get(e)],
+            "retry": fields.get("retry"), "is_active": fields.get("is_active")}
+
+
 def _remediation_tail(squid_id: str) -> str:
     """The two ways out of a squid left by a failed config-apply call, shared
     by both failure paths below (only the opening clause differs — what each
@@ -140,14 +217,22 @@ def _config_apply_unknown(squid_id: str, crawler_id: str, detail: str) -> dict:
 @structured(verify_with="list_my_scrapers(name=...), which lists the scraper if it was created")
 def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = None,
                       config: dict | None = None,
-                      concurrency: int | None = None) -> dict:
-    """Create a squid from a crawler without running it. `concurrency` is a
-    squid-level column, not a crawler param — lifted out of `config` if
-    passed there and sent top-level either way."""
+                      concurrency: int | None = None,
+                      webhook: dict | None = None) -> dict:
+    """Create a squid from a crawler without running it. `concurrency` and
+    `webhook` are squid-level fields, not crawler params — lifted out of
+    `config` if passed there and sent on their own either way."""
     crawler_id = resolve_crawler_id(client, scraper)
     cfg = dict(config) if config else {}
     cfg_concurrency = cfg.pop("concurrency", None)
     effective_concurrency = concurrency if concurrency is not None else cfg_concurrency
+    webhook = _lift_webhook(cfg, webhook)
+    webhook_fields = None
+    if webhook is not None:
+        # Checked before the squid exists, like config, so a bad webhook leaves no orphan.
+        webhook_fields, errors = _webhook_fields(webhook)
+        if errors:
+            return {"error_code": "validation_error", "errors": errors, "scraper": crawler_id}
 
     wire_names: dict = {}
     if cfg:
@@ -194,10 +279,21 @@ def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = Non
         except httpx.TransportError as exc:
             # Unknown whether it landed — do not delete a squid that might be fine.
             return _config_apply_unknown(squid_id, crawler_id, str(exc) or type(exc).__name__)
-    return {"squid_id": squid_id, "scraper": crawler_id,
-            "name": name or squid.get("name"), "concurrency": effective_concurrency,
-            "message": "Squid created. Add inputs with add_tasks, then run it with "
-                       "run_scraper(squid_id=...). estimate_run gives the cost first."}
+    out = {"squid_id": squid_id, "scraper": crawler_id,
+           "name": name or squid.get("name"), "concurrency": effective_concurrency,
+           "message": "Squid created. Add inputs with add_tasks, then run it with "
+                      "run_scraper(squid_id=...). estimate_run gives the cost first."}
+    if webhook_fields is not None:
+        try:
+            saved = client.set_webhook(squid_id, webhook_fields)
+        except LobstrAPIError as exc:
+            base = to_error_dict(exc)
+            return base | _config_rejected(client, squid_id, crawler_id, base["message"])
+        except httpx.TransportError as exc:
+            return _config_apply_unknown(squid_id, crawler_id, str(exc) or type(exc).__name__)
+        saved = saved.get("webhook_fields") if isinstance(saved, dict) else None
+        out["webhook"] = _webhook_view(saved or webhook_fields)
+    return out
 
 
 def _squid_and_wire_names(client: LobstrClient, squid_id: str) -> tuple[dict, dict]:
@@ -242,18 +338,26 @@ def add_tasks_impl(client: LobstrClient, squid_id: str, tasks: list[dict]) -> di
 @structured(verify_with="get_my_scraper(squid_id=...)")
 def update_scraper_impl(client: LobstrClient, squid_id: str, name: str | None = None,
                         config: dict | None = None,
-                        concurrency: int | None = None) -> dict:
+                        concurrency: int | None = None,
+                        webhook: dict | None = None) -> dict:
     """Change an existing squid's settings without running it or touching
     its saved tasks. No orphan risk: the squid already exists."""
     cfg = dict(config) if config else {}
     cfg_concurrency = cfg.pop("concurrency", None)
     effective_concurrency = concurrency if concurrency is not None else cfg_concurrency
+    webhook = _lift_webhook(cfg, webhook)
 
-    if name is None and not cfg and effective_concurrency is None:
+    if name is None and not cfg and effective_concurrency is None and webhook is None:
         return {"error_code": "invalid_request",
-                "message": "provide at least one of name, config, concurrency"}
+                "message": "provide at least one of name, config, concurrency, webhook"}
 
     wire_names, squid = _squid_and_wire_names(client, squid_id)
+    webhook_fields = None
+    if webhook is not None:
+        webhook_fields, errors = _webhook_fields(webhook, squid.get("webhook_fields"))
+        if errors:
+            return {"error_code": "validation_error", "errors": errors, "squid_id": squid_id,
+                    "message": "Nothing was changed."}
     body: dict = {}
     if name is not None:
         body["name"] = name
@@ -266,12 +370,25 @@ def update_scraper_impl(client: LobstrClient, squid_id: str, name: str | None = 
         # A save only takes effect with a recognized field like name riding along.
         body["name"] = squid.get("name") or squid.get("crawler") or squid_id
 
-    updated = client.update_squid(squid_id, body)
+    updated = client.update_squid(squid_id, body) if body else {}
     updated = updated if isinstance(updated, dict) else {}
-    return {"squid_id": squid_id,
-            "name": updated.get("name", body.get("name")),
-            "concurrency": updated.get("concurrency", effective_concurrency),
-            "message": "Scraper settings updated."}
+    out = {"squid_id": squid_id,
+           "name": updated.get("name", body.get("name")),
+           "concurrency": updated.get("concurrency", effective_concurrency),
+           "message": "Scraper settings updated."}
+    if webhook_fields is not None:
+        try:
+            saved = client.set_webhook(squid_id, webhook_fields)
+        except LobstrAPIError as exc:
+            if not body:
+                raise
+            # The settings above are saved; say so rather than "nothing changed".
+            return to_error_dict(exc) | {
+                "squid_id": squid_id, "settings_saved": True,
+                "message": f"Settings saved, but the webhook was refused: {exc.message}"}
+        saved = saved.get("webhook_fields") if isinstance(saved, dict) else None
+        out["webhook"] = _webhook_view(saved or webhook_fields)
+    return out
 
 
 # What the API's estimate counts, and what it does not. Both are things a
@@ -336,7 +453,8 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
                            "openWorldHint": True})
     def create_squid(scraper: str, name: str | None = None,
                      config: dict | None = None,
-                     concurrency: int | None = None) -> dict:
+                     concurrency: int | None = None,
+                     webhook: dict | None = None) -> dict:
         """Create a new squid from a crawler — WITHOUT running it. `config`
         takes "squid"-level params directly (including any published alias,
         e.g. `squid_country`) and "function"-level ones nested under a
@@ -351,10 +469,17 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
         (`deleted: true`); only if that cleanup itself fails does it still
         exist, named in the error. A save that fails outright (e.g. a
         timeout) leaves the squid, unknown whether it saved — not deleted.
-        Retrying with the same name fails while the squid still exists."""
+        Retrying with the same name fails while the squid still exists.
+
+        `webhook` (optional) makes lobstr.io POST to your URL when a run of
+        this squid changes state: {"url": "https://...", "events": [...],
+        "retry": bool, "is_active": bool}. events: run.running, run.paused,
+        run.done, run.error (default run.done and run.error); retry (default
+        true) tries a failed delivery 3 more times, 15 minutes apart. It is a
+        squid field, not a crawler param: never inside `config`."""
         authz(EXECUTE_SCOPES)
         return create_squid_impl(client_factory(), scraper, name=name, config=config,
-                                 concurrency=concurrency)
+                                 concurrency=concurrency, webhook=webhook)
 
     @mcp.tool(annotations={"title": "Add Tasks", "readOnlyHint": False,
                            "destructiveHint": False, "idempotentHint": False,
@@ -372,14 +497,20 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
                            "openWorldHint": True})
     def update_scraper(squid_id: str, name: str | None = None,
                        config: dict | None = None,
-                       concurrency: int | None = None) -> dict:
+                       concurrency: int | None = None,
+                       webhook: dict | None = None) -> dict:
         """Change an existing squid's `name`, `config` (same shape/aliases as
-        create_squid's), and/or `concurrency` — WITHOUT running it or
+        create_squid's), `concurrency` and/or `webhook` — WITHOUT running it or
         touching saved tasks. Pass at least one. No orphan risk: the squid
-        already exists, so a rejected config is just a normal error."""
+        already exists, so a rejected config is just a normal error.
+
+        `webhook` has create_squid's shape ({"url", "events", "retry",
+        "is_active"}); a key you leave out keeps the squid's saved webhook
+        value, and is_active is true unless you pass false (how to turn it
+        off). get_my_scraper shows the saved one under `webhook_fields`."""
         authz(EXECUTE_SCOPES)
         return update_scraper_impl(client_factory(), squid_id, name=name, config=config,
-                                   concurrency=concurrency)
+                                   concurrency=concurrency, webhook=webhook)
 
     @mcp.tool(annotations={"title": "Estimate Run", "readOnlyHint": True,
                            "destructiveHint": False, "openWorldHint": True})

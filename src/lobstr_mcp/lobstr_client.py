@@ -237,6 +237,14 @@ class LobstrClient:
         with _as_lobstr_error(f"/squids/{squid_hash}"):
             return self._llhttp.post(f"/squids/{squid_hash}", json=settings)
 
+    def set_webhook(self, squid_hash: str, webhook_fields: dict) -> dict:
+        # POST /delivery is the documented home of a squid's webhook (docs:
+        # configure-webhook-delivery); it wants all four keys: url, is_active,
+        # events (a dict of booleans) and retry.
+        with _as_lobstr_error("/delivery"):
+            return self._llhttp.post("/delivery", json={"squid": squid_hash,
+                                                         "webhook_fields": webhook_fields})
+
     def delete_squid(self, squid_hash: str) -> dict:
         """Delete a squid outright (not reversible, unlike deactivate/empty)."""
         with _as_lobstr_error(f"/squids/{squid_hash}"):
