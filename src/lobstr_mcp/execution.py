@@ -946,17 +946,31 @@ def get_results_impl(client, *, run_id: str | None = None, squid_id: str | None 
     # computed from the untrimmed rows so the model always sees every column it
     # could ask for via `fields`
     available_fields = sorted({k for r in records if isinstance(r, dict) for k in r})
+    # a Google Maps business with several emails comes as one row per email, in
+    # a row: the cap counts businesses, so their rows stay together
+    keys = [r.get("id") if isinstance(r, dict) else None for r in records]
     if fields:
-        records = [{k: r.get(k) for k in fields} for r in records if isinstance(r, dict)]
+        records = [{k: r.get(k) for k in fields} if isinstance(r, dict) else r for r in records]
 
-    capped = records[:max_rows]
+    capped, businesses, previous = [], 0, None
+    for key, row in zip(keys, records):
+        if key is None or key != previous:
+            if businesses == max_rows:
+                break
+            businesses += 1
+        capped.append(row)
+        previous = key
     if not full:
         capped = [_strip_empty(r) if isinstance(r, dict) else r for r in capped]
+    rows_note = ({"rows_note": f"{businesses} businesses in {len(capped)} rows: a business with several "
+                               "emails comes as one row per email (billed once)"}
+                 if businesses < len(capped) else {})
     return {"total_results": payload.get("total_results"),
             "page": payload.get("page", page),
             "page_size": effective_page_size,
             "total_pages": payload.get("total_pages"),
             "returned": len(capped),
+            **rows_note,
             "available_fields": available_fields,
             "next": payload.get("next"),
             "results": capped,
