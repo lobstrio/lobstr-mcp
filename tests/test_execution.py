@@ -597,6 +597,24 @@ def test_get_results_default_cap_is_ten_full_is_twentyfive():
     assert get_results_impl(_results_client(rows), run_id="run1", full=True)["returned"] == 25
 
 
+def test_get_results_keeps_every_email_row_of_a_business():
+    # 2026-11-12, run 877930a2: 30 businesses came as 37 rows (one per email) and
+    # the cap at 30 rows hid the last 7 businesses
+    rows = []
+    for i in range(12):
+        rows += [{"id": i, "name": f"b{i}", "email": f"e{i}-{n}"} for n in range(3 if i in (2, 5) else 1)]
+    out = get_results_impl(_results_client(rows), run_id="run1", page_size=10)
+    assert out["returned"] == 14  # businesses 0..9, two of them with 3 rows
+    assert [r["id"] for r in out["results"]][-1] == 9
+    assert out["rows_note"].startswith("10 businesses in 14 rows")
+    # same with `fields` leaving the id out
+    out = get_results_impl(_results_client(rows), run_id="run1", page_size=10, fields=["name"])
+    assert out["returned"] == 14
+    # one row per business: no note
+    out = get_results_impl(_results_client(rows[:3]), run_id="run1")
+    assert "rows_note" not in out
+
+
 def _paged_api_client(all_rows, seen_page_sizes=None):
     """A mock /v1/results that actually respects page_size (unlike
     _results_client, which always answers with every row regardless of what
