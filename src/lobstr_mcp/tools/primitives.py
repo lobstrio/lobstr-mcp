@@ -218,14 +218,17 @@ def _config_apply_unknown(squid_id: str, crawler_id: str, detail: str) -> dict:
 def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = None,
                       config: dict | None = None,
                       concurrency: int | None = None,
-                      webhook: dict | None = None) -> dict:
-    """Create a squid from a crawler without running it. `concurrency` and
-    `webhook` are squid-level fields, not crawler params — lifted out of
-    `config` if passed there and sent on their own either way."""
+                      webhook: dict | None = None,
+                      auto_slots: bool | None = None) -> dict:
+    """Create a squid from a crawler without running it. `concurrency`,
+    `auto_slots` and `webhook` are squid-level fields, not crawler params —
+    lifted out of `config` if passed there and sent on their own either way."""
     crawler_id = resolve_crawler_id(client, scraper)
     cfg = dict(config) if config else {}
     cfg_concurrency = cfg.pop("concurrency", None)
     effective_concurrency = concurrency if concurrency is not None else cfg_concurrency
+    cfg_auto = cfg.pop("auto_slots", None)
+    auto_slots = auto_slots if auto_slots is not None else cfg_auto
     webhook = _lift_webhook(cfg, webhook)
     webhook_fields = None
     if webhook is not None:
@@ -269,8 +272,10 @@ def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = Non
         body["params"] = _apply_wire_names(cfg, wire_names)
     if effective_concurrency is not None:
         body["concurrency"] = effective_concurrency
+    if auto_slots is not None:
+        body["auto_slots"] = bool(auto_slots)
 
-    if cfg or effective_concurrency is not None:
+    if cfg or effective_concurrency is not None or auto_slots is not None:
         try:
             client.update_squid(squid_id, body)
         except LobstrAPIError as exc:
@@ -281,6 +286,7 @@ def create_squid_impl(client: LobstrClient, scraper: str, name: str | None = Non
             return _config_apply_unknown(squid_id, crawler_id, str(exc) or type(exc).__name__)
     out = {"squid_id": squid_id, "scraper": crawler_id,
            "name": name or squid.get("name"), "concurrency": effective_concurrency,
+           "auto_slots": bool(auto_slots) if auto_slots is not None else squid.get("auto_slots"),
            "message": "Squid created. Add inputs with add_tasks, then run it with "
                       "run_scraper(squid_id=...). estimate_run gives the cost first."}
     if webhook_fields is not None:
@@ -339,17 +345,20 @@ def add_tasks_impl(client: LobstrClient, squid_id: str, tasks: list[dict]) -> di
 def update_scraper_impl(client: LobstrClient, squid_id: str, name: str | None = None,
                         config: dict | None = None,
                         concurrency: int | None = None,
-                        webhook: dict | None = None) -> dict:
+                        webhook: dict | None = None,
+                        auto_slots: bool | None = None) -> dict:
     """Change an existing squid's settings without running it or touching
     its saved tasks. No orphan risk: the squid already exists."""
     cfg = dict(config) if config else {}
     cfg_concurrency = cfg.pop("concurrency", None)
     effective_concurrency = concurrency if concurrency is not None else cfg_concurrency
+    cfg_auto = cfg.pop("auto_slots", None)
+    auto_slots = auto_slots if auto_slots is not None else cfg_auto
     webhook = _lift_webhook(cfg, webhook)
 
-    if name is None and not cfg and effective_concurrency is None and webhook is None:
+    if name is None and not cfg and effective_concurrency is None and webhook is None and auto_slots is None:
         return {"error_code": "invalid_request",
-                "message": "provide at least one of name, config, concurrency, webhook"}
+                "message": "provide at least one of name, config, concurrency, auto_slots, webhook"}
 
     wire_names, squid = _squid_and_wire_names(client, squid_id)
     webhook_fields = None
@@ -366,6 +375,8 @@ def update_scraper_impl(client: LobstrClient, squid_id: str, name: str | None = 
         body["params"] = _effective_settings(squid, _apply_wire_names(cfg, wire_names))
     if effective_concurrency is not None:
         body["concurrency"] = effective_concurrency
+    if auto_slots is not None:
+        body["auto_slots"] = bool(auto_slots)
     if "params" in body and "name" not in body:
         # A save only takes effect with a recognized field like name riding along.
         body["name"] = squid.get("name") or squid.get("crawler") or squid_id
@@ -376,6 +387,8 @@ def update_scraper_impl(client: LobstrClient, squid_id: str, name: str | None = 
            "name": updated.get("name", body.get("name")),
            "concurrency": updated.get("concurrency", effective_concurrency),
            "message": "Scraper settings updated."}
+    if auto_slots is not None:
+        out["auto_slots"] = updated.get("auto_slots", bool(auto_slots))
     if webhook_fields is not None:
         try:
             saved = client.set_webhook(squid_id, webhook_fields)
@@ -454,7 +467,8 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
     def create_squid(scraper: str, name: str | None = None,
                      config: dict | None = None,
                      concurrency: int | None = None,
-                     webhook: dict | None = None) -> dict:
+                     webhook: dict | None = None,
+                     auto_slots: bool | None = None) -> dict:
         """Create a new squid from a crawler — WITHOUT running it. `config`
         takes "squid"-level params directly (including any published alias,
         e.g. `squid_country`) and "function"-level ones nested under a
@@ -476,10 +490,16 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
         "retry": bool, "is_active": bool}. events: run.running, run.paused,
         run.done, run.error (default run.done and run.error); retry (default
         true) tries a failed delivery 3 more times, 15 minutes apart. It is a
-        squid field, not a crawler param: never inside `config`."""
+        squid field, not a crawler param: never inside `config`.
+
+        `auto_slots` (scrapers whose get_scraper_details shows auto_slots:
+        true, e.g. Google Maps Leads): the engine sets the workers from the
+        plan's slots and the tasks left, keeping 1 slot free for another
+        launch; `concurrency` is then unused. New squids of such a scraper
+        start on Auto; pass false for a fixed `concurrency`."""
         authz(EXECUTE_SCOPES)
         return create_squid_impl(client_factory(), scraper, name=name, config=config,
-                                 concurrency=concurrency, webhook=webhook)
+                                 concurrency=concurrency, webhook=webhook, auto_slots=auto_slots)
 
     @mcp.tool(annotations={"title": "Add Tasks", "readOnlyHint": False,
                            "destructiveHint": False, "idempotentHint": False,
@@ -498,19 +518,23 @@ def register_primitive_tools(mcp, client_factory, authorizer=None) -> None:
     def update_scraper(squid_id: str, name: str | None = None,
                        config: dict | None = None,
                        concurrency: int | None = None,
-                       webhook: dict | None = None) -> dict:
+                       webhook: dict | None = None,
+                       auto_slots: bool | None = None) -> dict:
         """Change an existing squid's `name`, `config` (same shape/aliases as
-        create_squid's), `concurrency` and/or `webhook` — WITHOUT running it or
+        create_squid's), `concurrency`, `auto_slots` and/or `webhook` — WITHOUT running it or
         touching saved tasks. Pass at least one. No orphan risk: the squid
         already exists, so a rejected config is just a normal error.
 
         `webhook` has create_squid's shape ({"url", "events", "retry",
         "is_active"}); a key you leave out keeps the squid's saved webhook
         value, and is_active is true unless you pass false (how to turn it
-        off). get_my_scraper shows the saved one under `webhook_fields`."""
+        off). get_my_scraper shows the saved one under `webhook_fields`.
+
+        `auto_slots`: true lets the engine set the workers (create_squid says
+        how), false goes back to `concurrency`; refused on scrapers without it."""
         authz(EXECUTE_SCOPES)
         return update_scraper_impl(client_factory(), squid_id, name=name, config=config,
-                                   concurrency=concurrency, webhook=webhook)
+                                   concurrency=concurrency, webhook=webhook, auto_slots=auto_slots)
 
     @mcp.tool(annotations={"title": "Estimate Run", "readOnlyHint": True,
                            "destructiveHint": False, "openWorldHint": True})
