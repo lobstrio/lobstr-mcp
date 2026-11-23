@@ -4,6 +4,7 @@ These protect AI-triggered runs, which cost real credits.
 """
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import time
@@ -50,6 +51,30 @@ def validate_input(values: dict, json_schema: dict,
         check = _PY_TYPE_OK.get(spec.get("type"))
         if check and not check(val):
             errors.append(f"{key} must be {spec.get('type')}")
+    return errors
+
+
+def unknown_inputs(values: dict, json_schema: dict, scraper_name: str) -> list[str]:
+    """Errors for the keys of `values` the scraper does not take (empty if none).
+
+    Florian, 21 and 22/11/2026: an agent passed extended_profile_data, a
+    LinkedIn Leads Scraper setting, to a Sales Navigator run. An unknown key
+    went out as a task field: the squid was created, the API refused the
+    task, the squid was deleted, and the agent retried without the key, so
+    without profile details (get_profile_details on that scraper). Refused
+    here, before anything is created, with the nearest input and the list.
+    """
+    props = json_schema.get("properties", {})
+    unknown = [k for k in values if k not in props]
+    if not unknown:
+        return []
+    names = sorted(props)
+    errors = []
+    for key in unknown:
+        near = difflib.get_close_matches(key, names, n=1, cutoff=0.6)
+        hint = f": did you mean {near[0]}?" if near else "."
+        errors.append(f"{key} is not an input of {scraper_name}{hint}")
+    errors.append(f"Its inputs: {', '.join(names)}.")
     return errors
 
 

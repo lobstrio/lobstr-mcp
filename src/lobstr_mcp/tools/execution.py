@@ -132,8 +132,9 @@ def register_execution_tools(mcp, client_factory, settings, idem_store,
         levels; the schema publishes the second under a prefixed alias (e.g.
         `squid_country`, Google's search region, beside the task-level
         `country` that goes into the search itself) and `input` takes that
-        alias — this call sends it under the API's own name. Concepts &
-        pricing: https://docs.lobstr.io/mcp"""
+        alias — this call sends it under the API's own name. A key the
+        scraper does not take is refused before anything is created, with the
+        nearest input. Concepts & pricing: https://docs.lobstr.io/mcp"""
         authz(EXECUTE_SCOPES)
         return run_scraper_impl(client_factory(), settings, idem_store,
                                 scraper=scraper, input=input, confirm=confirm,
