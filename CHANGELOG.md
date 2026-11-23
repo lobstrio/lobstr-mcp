@@ -22,6 +22,9 @@ The number lives in `pyproject.toml` and is read through `lobstr_mcp.__version__
 
 ### Changed
 
+- `run_scraper` refuses a key the scraper does not take (`validation_error`) before anything is created,
+  naming the nearest input and listing them all. It went out as a task field: the squid was created, the
+  API refused the task, the squid was deleted. Checked only when `/params` was read.
 - Slots follow the API's new rule (2026-11-02): only runs in progress use them, a launch past the
   plan's slots is refused (`slots_limit_exceeded`, nothing queued), and a plan holds up to 100
   scrapers per slot (`squids_limit_exceeded`, new). `check_credits` returns `squids` and

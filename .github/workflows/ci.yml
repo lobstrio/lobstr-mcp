@@ -16,6 +16,7 @@ jobs:
       - name: Install
         run: |
           python -m pip install --upgrade pip
-          pip install ".[dev]"
+          # redis 8.2.0 breaks fakeredis (2.39, 2.40): the persistence tests fail. Prod runs redis 8.1.0.
+          pip install ".[dev]" "redis<8.2"
       - name: Test
         run: python -m pytest -q

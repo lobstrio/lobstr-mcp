@@ -34,6 +34,7 @@ from lobstr_mcp.safeguards import (
     CostEstimate,
     compute_idempotency_key,
     estimate_cost,
+    unknown_inputs,
     validate_input,
     verification_cost_note,
 )
@@ -474,6 +475,11 @@ def run_scraper_impl(client, settings, idem_store, scraper: str | None = None,
         check_required = (not reuse) or has_task_input
         errors = validate_input(input, schema, input_modes=input_modes,
                                 check_required=check_required)
+        # A key the scraper does not take used to go out as a task field, after
+        # the squid was created. Only with /params read: without it the schema
+        # misses the inputs only /params knows (auto_verify_emails).
+        if crawler_params is not None:
+            errors = unknown_inputs(input, schema, crawler.get("name") or scraper) + errors
         if errors:
             return {"error_code": "validation_error", "errors": errors}
     # The API doesn't apply a declared default itself; send it for a new squid.

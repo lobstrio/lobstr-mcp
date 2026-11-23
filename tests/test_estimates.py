@@ -229,8 +229,11 @@ def test_a_bad_parameter_on_a_thin_balance_returns_the_apis_error():
         if key == ("GET", "/v1/tasks"):
             return httpx.Response(200, json={"total_pages": 1, "page": 1, "data": []})
         if key == ("GET", "/v1/crawlers/gm/params"):
+            # listed, so this client sends it (a key no input lists is refused
+            # before any request, see test_unknown_inputs.py); the API refuses it
             return httpx.Response(200, json={"task": {"query": {"type": "string"}},
-                                             "squid": {"max_results": {"type": "int"}}})
+                                             "squid": {"max_results": {"type": "int"},
+                                                       "auto_verify_emails": {"type": "boolean"}}})
         return httpx.Response(200, json={
             ("GET", "/v1/squids/sq1"): {"id": "sq1", "crawler": "gm",
                                         "params": {"max_results": 10}},
