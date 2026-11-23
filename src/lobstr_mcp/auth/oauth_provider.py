@@ -35,7 +35,7 @@ from mcp.server.auth.provider import (
 )
 from mcp.shared.auth import OAuthToken
 
-from lobstr_mcp.auth.scopes import ALL_SCOPES
+from lobstr_mcp.auth.scopes import ALL_SCOPES, expand_granted
 from lobstr_mcp.auth.token_store import TokenLink, TokenStore
 
 _PENDING_TTL = 600             # 10 min for the user to approve on the frontend
@@ -124,7 +124,19 @@ class LobstrOAuthProvider(OAuthProvider):
         self._clients.put(client_info)
 
     async def get_client(self, client_id):
-        return self._clients.get(client_id)
+        client = self._clients.get(client_id)
+        if not getattr(client, "scope", None):
+            return client
+        # A client registered before profile:read was split out of account:read
+        # (September 2026) holds account:read only, and the SDK refuses its next
+        # authorization, which asks for profile:read: "invalid_scope: Client was
+        # not registered with scope profile:read" (Claude Code, 23/11/2026). It
+        # gets the scopes account:read implies, as its old tokens already do.
+        registered = client.scope.split()
+        implied = [s for s in ALL_SCOPES if s in expand_granted(registered) and s not in registered]
+        if not implied:
+            return client
+        return client.model_copy(update={"scope": " ".join(registered + implied)})
 
     @staticmethod
     def _redirect_host(client) -> str | None:

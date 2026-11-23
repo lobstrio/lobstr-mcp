@@ -20,6 +20,12 @@ The number lives in `pyproject.toml` and is read through `lobstr_mcp.__version__
 - The `export_limit_reached` error and the 30-row note on `get_results`: since 2026-11-03 the free plan reads
   every result.
 
+### Fixed
+
+- A client registered before `profile:read` was split out of `account:read` (September 2026) can sign in
+  again: it was refused with `invalid_scope: Client was not registered with scope profile:read`. It now gets
+  the scopes `account:read` implies, as its tokens already did.
+
 ### Changed
 
 - `run_scraper` refuses a key the scraper does not take (`validation_error`) before anything is created,
