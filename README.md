@@ -70,7 +70,7 @@ Or paste this to your agent:
 ```text
 Connect the lobstr.io MCP server (https://api.lobstr.io/v2/mcp)
 with my API key. Then find the operation that fits,
-tell me what it costs, and get every bakery in Lyon
+tell me what it costs, and get every bakery in Austin
 from Google Maps with its phone number.
 ```
 
