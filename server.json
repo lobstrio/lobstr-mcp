@@ -4,11 +4,27 @@
   "title": "lobstr.io",
   "description": "Structured data from websites for AI agents: Google Maps, Leboncoin, X and more, one call each.",
   "websiteUrl": "https://www.lobstr.io",
+  "icons": [
+    {
+      "src": "https://www.lobstr.io/images/favicon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": [
+        "any"
+      ]
+    },
+    {
+      "src": "https://www.lobstr.io/images/favicon-512x512.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ]
+    }
+  ],
   "repository": {
     "url": "https://github.com/lobstrio/lobstr-mcp",
     "source": "github"
   },
-  "version": "2.0.0",
+  "version": "2.0.1",
   "remotes": [
     {
       "type": "streamable-http",
