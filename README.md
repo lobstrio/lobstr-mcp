@@ -10,10 +10,10 @@
 <p align="center">Structured data from websites for Claude, ChatGPT, Cursor and any MCP client: the whole lobstr.io API in five tools.</p>
 
 <p align="center">
-  <a href="https://docs.lobstr.io/agents"><strong>Docs</strong></a> ·
+  <a href="https://docs.lobstr.io/agents?utm_source=lobstr-mcp&utm_medium=readme"><strong>Docs</strong></a> ·
   <a href="https://api.lobstr.io/v2/catalog.md"><strong>Catalog</strong></a> ·
   <a href="https://app.lobstr.io/dashboard/api"><strong>API key</strong></a> ·
-  <a href="https://www.lobstr.io/pricing"><strong>Pricing</strong></a>
+  <a href="https://www.lobstr.io/pricing?utm_source=lobstr-mcp&utm_medium=readme"><strong>Pricing</strong></a>
 </p>
 
 ---
