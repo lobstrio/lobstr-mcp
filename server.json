@@ -1,0 +1,26 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.lobstrio/lobstr-mcp",
+  "title": "lobstr.io",
+  "description": "Structured data from websites for AI agents: Google Maps, Leboncoin, X and more, one call each.",
+  "websiteUrl": "https://www.lobstr.io",
+  "repository": {
+    "url": "https://github.com/lobstrio/lobstr-mcp",
+    "source": "github"
+  },
+  "version": "2.0.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://api.lobstr.io/v2/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer and your lobstr.io API key, from https://app.lobstr.io/dashboard/api",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

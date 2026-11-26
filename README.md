@@ -5,125 +5,97 @@
   </picture>
 </p>
 
-<h1 align="center">lobstr-mcp</h1>
+<h1 align="center">lobstr.io MCP server</h1>
 
-<p align="center">Run lobstr.io scrapers from Claude, ChatGPT, and any MCP client — no CSV export/import.</p>
+<p align="center">Structured data from websites for Claude, ChatGPT, Cursor and any MCP client: the whole lobstr.io API in five tools.</p>
 
 <p align="center">
-  <a href="https://github.com/lobstrio/lobstr-mcp/actions/workflows/ci.yml"><img src="https://github.com/lobstrio/lobstr-mcp/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/lobstrio/lobstr-mcp/releases/latest"><img src="https://img.shields.io/github/v/release/lobstrio/lobstr-mcp" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/github/license/lobstrio/lobstr-mcp" alt="License"></a>
-  <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-server-000000" alt="MCP server"></a>
+  <a href="https://docs.lobstr.io/agents"><strong>Docs</strong></a> ·
+  <a href="https://api.lobstr.io/v2/catalog.md"><strong>Catalog</strong></a> ·
+  <a href="https://app.lobstr.io/dashboard/api"><strong>API key</strong></a> ·
+  <a href="https://www.lobstr.io/pricing"><strong>Pricing</strong></a>
 </p>
 
-<p align="center"><b>Hosted at <a href="https://mcp.lobstr.io/mcp">https://mcp.lobstr.io/mcp</a></b> — add it to any MCP client by URL, no install required.</p>
+---
 
-> **Not the docs MCP.** `docs.lobstr.io/mcp` answers "how does lobstr.io
-> work?". This one is "do this in my account": it authenticates as a user and
-> spends real credits.
+The server is hosted: there is nothing to install. It lives at `https://api.lobstr.io/v2/mcp` and takes your API key, from the [app](https://app.lobstr.io/dashboard/api), with 100 free credits a month.
 
-## Quick start
+## Connect
 
-No directory listing or approval needed — this server implements **Dynamic
-Client Registration**, so any MCP client can add it by URL and register
-itself. Authenticating opens Lobstr's consent page in a browser; click
-**Allow** and you're back in the client.
+**Claude Code**
 
-| Client | Setup |
-|---|---|
-| Claude Code | `claude mcp add --transport http lobstr https://mcp.lobstr.io/mcp` |
-| Claude Desktop, Cursor, Windsurf | Add the block below to the client's MCP config |
-| Claude.ai, ChatGPT | Settings → connectors → add custom connector → paste the URL |
-| VS Code | `.vscode/mcp.json`, add a server entry pointing at the URL |
-| Codex CLI | Register as a remote MCP server in `~/.codex/config.toml` |
+```bash
+claude mcp add --transport http lobstr https://api.lobstr.io/v2/mcp \
+  --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+**Cursor, Windsurf and any client that reads `mcpServers`**
 
 ```json
 {
   "mcpServers": {
     "lobstr": {
-      "type": "http",
-      "url": "https://mcp.lobstr.io/mcp"
+      "url": "https://api.lobstr.io/v2/mcp",
+      "headers": { "Authorization": "Bearer YOUR_API_KEY" }
     }
   }
 }
 ```
 
-Exact config keys vary by client and version — check your client's MCP docs
-if the block above doesn't match. **HTTPS is mandatory**: the hosted server
-only works over `https://`.
+**VS Code** (`.vscode/mcp.json`, the key asked once and kept secret)
 
-## Tools
-
-22 tools. There is no per-scraper tool — new lobstr.io scrapers work with
-**zero** code changes. Full behaviour, error codes and the intended call
-sequence: [`docs/tools.md`](docs/tools.md), [`docs/errors.md`](docs/errors.md).
-
-| Tool | Does |
-|---|---|
-| `search_scrapers` | Find scrapers matching a query |
-| `get_scraper_details` | A scraper's input schema, outputs and pricing |
-| `list_my_scrapers` | The user's saved scraper configurations |
-| `get_my_scraper` | One saved configuration by id |
-| `create_squid` | Save a new scraper configuration without running it |
-| `add_tasks` | Add input rows to a saved configuration |
-| `update_scraper` | Change a saved configuration's name, settings or concurrency without running it |
-| `estimate_run` | Authoritative cost/time estimate before running |
-| `run_scraper` | Configure and run a scraper in one call — **spends credits** |
-| `attach_account` | Link a connected platform account to a scraper |
-| `empty_scraper` | Clear a scraper's saved inputs, keep its config |
-| `deactivate_scraper` | Stop a scraper's schedule and run in progress without deleting it |
-| `get_run` | Status and progress of a run |
-| `wait_for_run` | Wait for a run to finish, up to 50 s per call |
-| `list_runs` | Recent runs for a scraper |
-| `get_results` | One page of a run's results |
-| `get_results_url` | A signed download URL for a run's full results |
-| `abort_run` | Stop a running job |
-| `list_accounts` | The user's connected platform accounts |
-| `get_account` | One connected account by id |
-| `check_credits` | Credit balance, slots in use and the scraper cap |
-| `whoami` | The authenticated user and server version |
-
-## Self-hosting
-
-```bash
-git clone https://github.com/lobstrio/lobstr-mcp.git
-cd lobstr-mcp
-cp .env.example .env    # then edit — see docs/configuration.md
-docker compose up -d --build
+```json
+{
+  "servers": {
+    "lobstr": {
+      "type": "http",
+      "url": "https://api.lobstr.io/v2/mcp",
+      "headers": { "Authorization": "Bearer ${input:lobstr-api-key}" }
+    }
+  },
+  "inputs": [
+    { "id": "lobstr-api-key", "type": "promptString", "description": "lobstr.io API key", "password": true }
+  ]
+}
 ```
 
-Full runbook, production hardening and log retention:
-[`DEPLOY.md`](DEPLOY.md). Environment variables:
-[`docs/configuration.md`](docs/configuration.md).
+**Claude, ChatGPT and any client that takes a URL only** (a custom connector): the key goes in the URL.
 
-## Development
-
-```bash
-uv sync --extra dev
-uv run pytest
+```text
+https://api.lobstr.io/v2/mcp?api_key=YOUR_API_KEY
 ```
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full dev setup and PR flow.
+Or paste this to your agent:
 
-## Learn more
+```text
+Connect the lobstr.io MCP server (https://api.lobstr.io/v2/mcp)
+with my API key. Then find the operation that fits,
+tell me what it costs, and get every bakery in Lyon
+from Google Maps with its phone number.
+```
 
-- [`docs/architecture.md`](docs/architecture.md) — how auth works, module map, safeguards
-- [`docs/tools.md`](docs/tools.md) — full tool reference
-- [`docs/errors.md`](docs/errors.md) — the error-code catalogue
-- [`docs/troubleshooting.md`](docs/troubleshooting.md) — common failure modes
-- [`CHANGELOG.md`](CHANGELOG.md) — what shipped, by version
+## Five tools
 
-lobstr.io: [website](https://lobstr.io) · [docs](https://docs.lobstr.io) ·
-[scraper store](https://lobstr.io/store) ·
-[Python SDK](https://github.com/lobstrio/lobstrio-sdk) ·
-[CLI](https://github.com/lobstrio/lobstrio-cli)
+| Tool | What it gives |
+| --- | --- |
+| `find_operations` | The operations that fit what you need, with their price. |
+| `get_operation` | An operation's options, the fields of its records, its errors. |
+| `run_operation` | One page of records, what it cost, and the call for the next page. |
+| `get_balance` | The credits left, and what one credit costs on your plan. |
+| `send_feedback` | What went wrong or what you need, to lobstr.io's team. Free. |
 
-## Contributing
+They go through the API itself: an agent gets the same answers, errors and prices as your code. Listing the tools needs no key.
 
-Issues and pull requests welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md).
-Security issues: [`SECURITY.md`](SECURITY.md), not a public issue. This
-project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
+## For agents that read
+
+- [lobstr.io/llms.txt](https://www.lobstr.io/llms.txt): lobstr.io in one page, every operation with its price.
+- [api.lobstr.io/v2/catalog.md](https://api.lobstr.io/v2/catalog.md): every operation; each one's whole contract at `/v2/catalog/{source}/{resource}/{verb}.md`.
+- [api.lobstr.io/v2/openapi.json](https://api.lobstr.io/v2/openapi.json): the API, for a client generator.
+
+## The v1 server
+
+The server for the batches (v1), squids, tasks and runs at `mcp.lobstr.io`, lives on the [`v1`](https://github.com/lobstrio/lobstr-mcp/tree/v1) branch, its last state tagged [`v1-final`](https://github.com/lobstrio/lobstr-mcp/releases/tag/v1-final).
 
 ## License
 
-[Apache License 2.0](LICENSE)
+[Apache 2.0](LICENSE)
