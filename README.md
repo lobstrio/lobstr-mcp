@@ -16,6 +16,10 @@
   <a href="https://www.lobstr.io/pricing?utm_source=lobstr-mcp&utm_medium=readme"><strong>Pricing</strong></a>
 </p>
 
+<p align="center">
+  <a href="https://glama.ai/mcp/connectors/io.github.lobstrio/lobstr-mcp"><img src="https://glama.ai/mcp/connectors/io.github.lobstrio/lobstr-mcp/badges/score.svg" alt="lobstr.io MCP connector on Glama"></a>
+</p>
+
 ---
 
 The server is hosted: there is nothing to install. It lives at `https://api.lobstr.io/v2/mcp` and takes your API key, from the [app](https://app.lobstr.io/dashboard/api), with 100 free credits a month.
