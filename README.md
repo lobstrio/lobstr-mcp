@@ -7,7 +7,7 @@
 
 <h1 align="center">lobstr.io MCP server</h1>
 
-<p align="center">Structured data from websites for Claude, ChatGPT, Cursor and any MCP client: the whole lobstr.io API in five tools.</p>
+<p align="center">Web data API for your AI agents: one call, JSON back in seconds, the same fields every time. The whole lobstr.io API in five tools, for Claude, ChatGPT, Cursor and any MCP client.</p>
 
 <p align="center">
   <a href="https://docs.lobstr.io/agents?utm_source=lobstr-mcp&utm_medium=readme"><strong>Docs</strong></a> ·
@@ -26,7 +26,7 @@ The server is hosted: there is nothing to install. It lives at `https://api.lobs
 
 ## Connect
 
-**Claude Code** (the plugin, the key asked once and kept secret)
+**Claude Code** (the plugin: you sign in to lobstr.io, no key to copy)
 
 ```text
 /plugin install lobstr --marketplace lobstrio/lobstr-mcp
@@ -75,10 +75,10 @@ gemini extensions install https://github.com/lobstrio/lobstr-mcp
 }
 ```
 
-**Claude, ChatGPT and any client that takes a URL only** (a custom connector): the key goes in the URL.
+**Claude, ChatGPT and any client that takes a URL** (a custom connector): the URL alone, and you sign in to lobstr.io when it asks.
 
 ```text
-https://api.lobstr.io/v2/mcp?api_key=YOUR_API_KEY
+https://api.lobstr.io/v2/mcp
 ```
 
 Or paste this to your agent:

@@ -1,7 +1,7 @@
 {
   "name": "lobstr",
-  "version": "2.0.3",
-  "description": "Structured data from websites for AI agents: Google Maps, realtor.com, X and more, one call each.",
+  "version": "2.0.4",
+  "description": "Web data API for your AI agents: one call, JSON back in seconds, the same fields every time.",
   "mcpServers": {
     "lobstr": {
       "type": "http",
