@@ -33,7 +33,7 @@ jobs:
           import json
           server = json.load(open("server.json"))
           url = server["remotes"][0]["url"]
-          for path in (".claude-plugin/plugin.json", ".cursor-plugin/plugin.json", "gemini-extension.json"):
+          for path in ("claude-plugin/.claude-plugin/plugin.json", ".cursor-plugin/plugin.json", "gemini-extension.json"):
               manifest = json.load(open(path))
               assert manifest["version"] == server["version"], (path, manifest["version"])
               assert manifest["mcpServers"]["lobstr"]["url"] == url, path
