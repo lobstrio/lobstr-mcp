@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.lobstrio/lobstr-mcp",
   "title": "lobstr.io",
-  "description": "Structured data from websites for AI agents: Google Maps, realtor.com, X and more, one call each.",
+  "description": "Web data API for your AI agents: one call, JSON back in seconds, the same fields every time.",
   "websiteUrl": "https://www.lobstr.io",
   "icons": [
     {
@@ -24,7 +24,7 @@
     "url": "https://github.com/lobstrio/lobstr-mcp",
     "source": "github"
   },
-  "version": "2.0.3",
+  "version": "2.0.4",
   "remotes": [
     {
       "type": "streamable-http",

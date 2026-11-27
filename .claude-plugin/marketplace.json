@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
   "name": "lobstr-mcp",
-  "description": "lobstr.io's plugin: its MCP server, structured data from websites for Claude.",
+  "description": "lobstr.io's plugin for Claude: web data API for your AI agents: one call, JSON back in seconds, the same fields every time.",
   "owner": {
     "name": "lobstr.io",
     "url": "https://www.lobstr.io"
@@ -10,7 +10,7 @@
     {
       "name": "lobstr",
       "source": "./claude-plugin",
-      "description": "Structured data from websites for AI agents: Google Maps, realtor.com, X and more, one call each.",
+      "description": "Web data API for your AI agents: one call, JSON back in seconds, the same fields every time.",
       "category": "data"
     }
   ]

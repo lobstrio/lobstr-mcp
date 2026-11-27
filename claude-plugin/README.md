@@ -1,6 +1,8 @@
 # lobstr.io plugin for Claude
 
-Structured data from websites for Claude: Google Maps places and reviews, realtor.com listings, X posts and more, one call each, as JSON records with the same fields every time. The plugin connects lobstr.io's hosted MCP server, `https://api.lobstr.io/v2/mcp`: nothing runs on your machine.
+lobstr.io is a web data API for your code and your AI agents. Each operation is one thing a site does: search a marketplace, get a listing, check it is still online. One call, JSON back in seconds, the same fields every time, read on the site at the moment you call. Sites from local businesses and real estate to travel, marketplaces, news and social networks, more each week: every operation is in [api.lobstr.io/v2/catalog.md](https://api.lobstr.io/v2/catalog.md).
+
+The plugin connects lobstr.io's hosted MCP server, `https://api.lobstr.io/v2/mcp`: nothing runs on your machine.
 
 ## Install
 
@@ -8,7 +10,7 @@ Structured data from websites for Claude: Google Maps places and reviews, realto
 /plugin install lobstr --marketplace lobstrio/lobstr-mcp
 ```
 
-Claude Code asks your lobstr.io API key once and keeps it secret. The key is in the app, under [API](https://app.lobstr.io/dashboard/api); the free plan has 100 credits a month.
+The first time a tool needs your account, Claude asks you to sign in to lobstr.io and allow it: no key to copy. The free plan has 100 credits a month.
 
 ## Tools
 
