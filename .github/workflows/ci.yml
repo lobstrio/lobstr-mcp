@@ -8,7 +8,8 @@ on:
     - cron: "17 6 * * *"
 
 jobs:
-  # server.json valid against the registry's schema, and the hosted server answering with its five tools.
+  # server.json valid against the registry's schema, the plugins and the extension on its version and endpoint,
+  # and the hosted server answering with its five tools.
   test:
     runs-on: ubuntu-latest
     steps:
@@ -25,6 +26,18 @@ jobs:
           schema = requests.get(server["$schema"], timeout=30).json()
           jsonschema.validate(server, schema)
           print("server.json ok")
+          PY
+      - name: the plugins and the extension carry server.json's version and endpoint
+        run: |
+          python - <<'PY'
+          import json
+          server = json.load(open("server.json"))
+          url = server["remotes"][0]["url"]
+          for path in (".claude-plugin/plugin.json", ".cursor-plugin/plugin.json", "gemini-extension.json"):
+              manifest = json.load(open(path))
+              assert manifest["version"] == server["version"], (path, manifest["version"])
+              assert manifest["mcpServers"]["lobstr"]["url"] == url, path
+          print("manifests ok:", server["version"])
           PY
       - name: the hosted server lists its tools
         run: |

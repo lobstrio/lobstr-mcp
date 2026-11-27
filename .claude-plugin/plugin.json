@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
+  "name": "lobstr",
+  "displayName": "lobstr.io",
+  "version": "2.0.3",
+  "description": "Structured data from websites for AI agents: Google Maps, realtor.com, X and more, one call each.",
+  "author": {
+    "name": "lobstr.io",
+    "url": "https://www.lobstr.io"
+  },
+  "homepage": "https://docs.lobstr.io/agents",
+  "repository": "https://github.com/lobstrio/lobstr-mcp",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "web-scraping",
+    "data-extraction",
+    "google-maps",
+    "real-estate",
+    "leads"
+  ],
+  "icon": "https://www.lobstr.io/images/favicon-512x512.png",
+  "documentationUrl": "https://docs.lobstr.io/agents",
+  "privacyPolicyUrl": "https://www.lobstr.io/legal/privacy-notice",
+  "termsOfServiceUrl": "https://www.lobstr.io/legal/terms-of-use",
+  "userConfig": {
+    "api_key": {
+      "type": "string",
+      "title": "lobstr.io API key",
+      "description": "From https://app.lobstr.io/dashboard/api. The free plan has 100 credits a month.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "mcpServers": {
+    "lobstr": {
+      "type": "http",
+      "url": "https://api.lobstr.io/v2/mcp",
+      "headers": {
+        "Authorization": "Bearer ${user_config.api_key}"
+      }
+    }
+  }
+}

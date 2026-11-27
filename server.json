@@ -24,7 +24,7 @@
     "url": "https://github.com/lobstrio/lobstr-mcp",
     "source": "github"
   },
-  "version": "2.0.2",
+  "version": "2.0.3",
   "remotes": [
     {
       "type": "streamable-http",

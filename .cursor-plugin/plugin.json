@@ -1,0 +1,41 @@
+{
+  "name": "lobstr",
+  "displayName": "lobstr.io",
+  "version": "2.0.3",
+  "description": "Structured data from websites for AI agents: Google Maps, realtor.com, X and more, one call each.",
+  "author": {
+    "name": "lobstr.io"
+  },
+  "homepage": "https://docs.lobstr.io/agents",
+  "repository": "https://github.com/lobstrio/lobstr-mcp",
+  "license": "Apache-2.0",
+  "keywords": [
+    "mcp",
+    "web-scraping",
+    "data-extraction",
+    "google-maps",
+    "real-estate",
+    "leads"
+  ],
+  "logo": ".github/assets/logo-plate.svg",
+  "variables": {
+    "type": "object",
+    "properties": {
+      "LOBSTR_API_KEY": {
+        "type": "string",
+        "title": "lobstr.io API key",
+        "description": "From https://app.lobstr.io/dashboard/api. The free plan has 100 credits a month.",
+        "writeOnly": true
+      }
+    },
+    "required": ["LOBSTR_API_KEY"]
+  },
+  "mcpServers": {
+    "lobstr": {
+      "url": "https://api.lobstr.io/v2/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LOBSTR_API_KEY}"
+      }
+    }
+  }
+}
