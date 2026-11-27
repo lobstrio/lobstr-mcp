@@ -21,6 +21,7 @@
   ],
   "icon": "https://www.lobstr.io/images/favicon-512x512.png",
   "documentationUrl": "https://docs.lobstr.io/agents",
+  "supportUrl": "https://help.lobstr.io",
   "privacyPolicyUrl": "https://www.lobstr.io/legal/privacy-notice",
   "termsOfServiceUrl": "https://www.lobstr.io/legal/terms-of-use",
   "userConfig": {
