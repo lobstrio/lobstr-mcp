@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- The lobstr.io favicon on a white plate, for marketplaces that want a square logo with its own
+       background (Cursor). Colors fixed: a plate does not follow the browser's dark mode. -->
+  <rect width="256" height="256" fill="#FFFFFF"/>
+  <g transform="translate(42 42) scale(2.6)">
+    <path fill="#0A2540" transform="translate(4 4)" d="M30 58 C14 58 4 46 4 31 C4 15 15 4 30 4 L36 4 L27 24 L52 12 C57 18 60 25 60 32 C60 47 47 58 30 58 Z"/>
+    <path fill="#FF0000" stroke="#0A2540" stroke-width="4" stroke-linejoin="round" d="M30 58 C14 58 4 46 4 31 C4 15 15 4 30 4 L36 4 L27 24 L52 12 C57 18 60 25 60 32 C60 47 47 58 30 58 Z"/>
+  </g>
+</svg>

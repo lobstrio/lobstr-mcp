@@ -1,0 +1,22 @@
+{
+  "name": "lobstr",
+  "version": "2.0.3",
+  "description": "Structured data from websites for AI agents: Google Maps, realtor.com, X and more, one call each.",
+  "mcpServers": {
+    "lobstr": {
+      "type": "http",
+      "url": "https://api.lobstr.io/v2/mcp",
+      "headers": {
+        "Authorization": "Bearer ${LOBSTR_API_KEY}"
+      }
+    }
+  },
+  "settings": [
+    {
+      "name": "lobstr.io API key",
+      "description": "From https://app.lobstr.io/dashboard/api. The free plan has 100 credits a month.",
+      "envVar": "LOBSTR_API_KEY",
+      "sensitive": true
+    }
+  ]
+}
