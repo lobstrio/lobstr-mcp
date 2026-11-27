@@ -9,7 +9,7 @@
   "plugins": [
     {
       "name": "lobstr",
-      "source": "./",
+      "source": "./claude-plugin",
       "description": "Structured data from websites for AI agents: Google Maps, realtor.com, X and more, one call each.",
       "category": "data"
     }
